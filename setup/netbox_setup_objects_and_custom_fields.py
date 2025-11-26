@@ -27,11 +27,14 @@ def get_arguments():
 
 
 def create_custom_field_choice_sets_proxmox_vm_templates(proxmox_api_obj):
-    proxmox_api_obj.proxmox_get_vm_templates()
+    proxmox_vm_templates = proxmox_api_obj.proxmox_get_vm_templates()
     extra_choices = []
 
-    for k, v in proxmox_api_obj.proxmox_vm_templates.items():
-        extra_choices.append([str(k), v])
+    if proxmox_vm_templates:
+        for k, v in proxmox_vm_templates.items():
+            extra_choices.append([str(k), v])
+    else:
+        extra_choices.append([str(-1), 'proxmox-vm-template-stub'])
 
     ncfcs = NetBoxCustomFieldChoiceSets(netbox_url, netbox_api_token, {'name': 'proxmox-vm-templates', 'extra_choices': extra_choices})
     return dict(ncfcs.obj)['id']
@@ -62,10 +65,11 @@ def create_custom_field_choice_sets_proxmox_lxc_templates(proxmox_api_obj):
         for psv in proxmox_lxc_templates:
             extra_choices.append([psv, proxmox_lxc_templates[psv]])
 
-        ncfcs = NetBoxCustomFieldChoiceSets(netbox_url, netbox_api_token, {'name': 'proxmox-lxc-templates', 'extra_choices': extra_choices})
-        return dict(ncfcs.obj)['id']
-    
-    return 0
+    else:
+        extra_choices.append(['placeholder-lxc-template', 'proxmox-lxc-templates-stub'])
+
+    ncfcs = NetBoxCustomFieldChoiceSets(netbox_url, netbox_api_token, {'name': 'proxmox-lxc-templates', 'extra_choices': extra_choices})
+    return dict(ncfcs.obj)['id']
 
 
 def create_custom_field_choice_sets_proxmox_vm_cluster_nodes(proxmox_api_obj):
