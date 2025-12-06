@@ -13,6 +13,8 @@ netbox_api_config:
   api_token: netbox_api_secret_token
   verify_ssl: false # or true, up to you
 proxmox:
+  create_vms_templates: True # default: False
+  create_lxc_templates: True # default: False
   cluster_name: name-of-proxmox-cluster #(no longer required as it will be discovered)
   node_commands:
     dmidecode_command: /usr/sbin/dmidecode # required: where dmidecode lives on your system
