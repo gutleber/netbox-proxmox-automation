@@ -191,8 +191,29 @@ def main():
 
         # Create Device in NetBox
         try:
-            device_serial = nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['serial']
-            netbox_device_id = dict(NetBoxDevices(nb_url, app_config['netbox_api_config']['api_token'], {'name': proxmox_node, 'role': netbox_device_role_id, 'device_type': netbox_device_type_id, 'site': netbox_site_id, 'platform': netbox_platform_id, 'serial': device_serial, 'cluster': netbox_cluster_id, 'status': 'active'}).obj)['id']
+            device_serial = None
+            system_info = nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']
+            device_serial = system_info.get('serial')
+
+            # If no serial or empty string, use a generated one or skip
+            if not device_serial or device_serial.strip() == '':
+                print(f"Warning: No serial found for {proxmox_node}, creating device without serial")
+
+            device_payload = {
+                'name': proxmox_node,
+                'role': netbox_device_role_id,
+                'device_type': netbox_device_type_id,
+                'site': netbox_site_id,
+                'platform': netbox_platform_id,
+                'cluster': netbox_cluster_id,
+                'status': 'active'
+            }
+
+            # Only add serial number if it exists
+            if device_serial:
+                device_payload['serial'] = device_serial
+
+            netbox_device_id = dict(NetBoxDevices(nb_url, app_config['netbox_api_config']['api_token'], device_payload).obj)['id']
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
 
@@ -262,8 +283,8 @@ def main():
                     except pynetbox.RequestError as e:
                         raise ValueError(e, e.error)
 
-    # If there are no changes, then delete the branch
-    if getattr(ipv4_address, 'nbb'):
+    # If there are no changes, and branch is defined, then delete the branch
+    if 'NETBOX_BRANCH' in os.environ and hasattr(ipv4_address, 'nbb'):
         if not ipv4_address.nbb.branch_changes():
             print(f"No changes.  Deleting branch {ipv4_address.nbb.branch_name}")
             del ipv4_address.nb.http_session.headers['X-NetBox-Branch']

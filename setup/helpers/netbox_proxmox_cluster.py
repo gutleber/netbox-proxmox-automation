@@ -83,7 +83,8 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
         client = paramiko.SSHClient()
 
         # Set policy for handling unknown host keys (RejectPolicy for security)
-        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        #client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
         # Connect to the server
         try:
