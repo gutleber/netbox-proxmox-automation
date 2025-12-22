@@ -283,12 +283,14 @@ def main():
                     except pynetbox.RequestError as e:
                         raise ValueError(e, e.error)
 
+    """
     # If there are no changes, and branch is defined, then delete the branch
     if 'NETBOX_BRANCH' in os.environ and hasattr(ipv4_address, 'nbb'):
         if not ipv4_address.nbb.branch_changes():
             print(f"No changes.  Deleting branch {ipv4_address.nbb.branch_name}")
             del ipv4_address.nb.http_session.headers['X-NetBox-Branch']
-            ipv4_address.nbb.delete_branch()
+            ipv4_address.nbb.delete_branch()    
+    """
 
 
 if __name__ == "__main__":
