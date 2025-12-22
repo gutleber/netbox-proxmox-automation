@@ -83,6 +83,11 @@ def main():
 
     nb_url = f"{app_config['netbox_api_config']['api_proto']}://{app_config['netbox_api_config']['api_host']}:{str(app_config['netbox_api_config']['api_port'])}/"
 
+    if 'verify_ssl' in app_config['netbox']:
+        os.environ['NB_VERIFY_SSL'] = str(int(app_config['netbox']['verify_ssl']))
+    else:
+        os.environ['NB_VERIFY_SSL'] = "0"
+
     if 'branch' in app_config['netbox']:
         branch_name = app_config['netbox']['branch']
         os.environ['NETBOX_BRANCH'] = branch_name

@@ -29,6 +29,7 @@ netbox:
   device_role: "Proxmox node" # required
   vm_role: "Proxmox VM" # required
   lxc_role: "Proxmox LXC" # required
+  verify_ssl: false # default: false
 automation_type: choices are ansible_automation or flask_application
 ansible_automation:
   host: name or ip of AWX/Tower/AAP host

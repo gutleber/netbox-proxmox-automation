@@ -45,6 +45,14 @@ class NetBox:
         # Initialize pynetbox API connection
         self.nb = pynetbox.api(self.netbox_url, token=self.netbox_token)
 
+        if 'NB_VERIFY_SSL' in os.environ:
+            if os.environ['NB_VERIFY_SSL'] == "1":
+                self.nb.http_session.verify = True
+            elif os.environ['NB_VERIFY_SSL'] == "0":
+                self.nb.http_session.verify = False
+            else:
+                raise ValueError(f"Unknown env setting for NB_VERIFY_SSL: {os.environ['NB_VERIFY_SSL']}")
+
         if 'NETBOX_BRANCH' in os.environ:
             if not 'NETBOX_BRANCH_TIMEOUT' in os.environ:
                 os.environ['NETBOX_BRANCH_TIMEOUT'] = '0'
