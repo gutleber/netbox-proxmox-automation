@@ -83,8 +83,8 @@ def main():
 
     nb_url = f"{app_config['netbox_api_config']['api_proto']}://{app_config['netbox_api_config']['api_host']}:{str(app_config['netbox_api_config']['api_port'])}/"
 
-    if 'verify_ssl' in app_config['netbox']:
-        os.environ['NB_VERIFY_SSL'] = str(int(app_config['netbox']['verify_ssl']))
+    if 'verify_ssl' in app_config['netbox_api_config'] and app_config['netbox_api_config']['api_proto'] == 'https':
+        os.environ['NB_VERIFY_SSL'] = str(int(app_config['netbox_api_config']['verify_ssl']))
     else:
         os.environ['NB_VERIFY_SSL'] = "0"
 

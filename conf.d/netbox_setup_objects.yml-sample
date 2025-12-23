@@ -11,7 +11,7 @@ netbox_api_config:
   api_host: name or ip of NetBox host
   api_port: 8000
   api_token: netbox_api_secret_token
-  verify_ssl: false # or true, up to you
+  verify_ssl: false # default: true, if api_proto == 'https'
 proxmox:
   create_vms_templates: True # default: False
   create_lxc_templates: True # default: False
@@ -29,7 +29,6 @@ netbox:
   device_role: "Proxmox node" # required
   vm_role: "Proxmox VM" # required
   lxc_role: "Proxmox LXC" # required
-  verify_ssl: false # default: false
 automation_type: choices are ansible_automation or flask_application
 ansible_automation:
   host: name or ip of AWX/Tower/AAP host
