@@ -1,6 +1,7 @@
 import os
 import re
 import pynetbox
+import requests
 import time
 
 from . netbox_branches import NetBoxBranches
@@ -43,15 +44,28 @@ class NetBox:
 
     def __init_api(self):
         # Initialize pynetbox API connection
-        self.nb = pynetbox.api(self.netbox_url, token=self.netbox_token)
+        try:
+            self.nb = pynetbox.api(self.netbox_url, token=self.netbox_token)
 
-        if 'NB_VERIFY_SSL' in os.environ:
+            if not 'NB_VERIFY_SSL' in os.environ:
+                raise ValueError("Missing 'NB_VERIFY_SSL' in environment!")
+            
             if os.environ['NB_VERIFY_SSL'] == "1":
                 self.nb.http_session.verify = True
             elif os.environ['NB_VERIFY_SSL'] == "0":
                 self.nb.http_session.verify = False
             else:
                 raise ValueError(f"Unknown env setting for NB_VERIFY_SSL: {os.environ['NB_VERIFY_SSL']}")
+        except requests.exceptions.SSLError as e:
+            raise ValueError(f"SSL error (pynetbox): {e}")
+        except pynetbox.RequestError as e:
+            raise ValueError(f"pynetbox request error: {e}")
+        except pynetbox.core.query.ContentError as e:
+            raise ValueError(f"pynetbox content error: {e}")
+        except pynetbox.core.query.AllocationError as e:
+            raise ValueError(f"pynetbox allocation error: {e}")
+        except NameError as e:
+            raise ValueError(f"pynetbox name error: {e}")
 
         if 'NETBOX_BRANCH' in os.environ:
             if not 'NETBOX_BRANCH_TIMEOUT' in os.environ:
