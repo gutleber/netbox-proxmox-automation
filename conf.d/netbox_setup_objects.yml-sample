@@ -11,8 +11,9 @@ netbox_api_config:
   api_host: name or ip of NetBox host
   api_port: 8000
   api_token: netbox_api_secret_token
-  verify_ssl: false # or true, up to you
+  verify_ssl: false # default: true, if api_proto == 'https'
 proxmox:
+  ssh_known_hosts_file: /some/path/known_hosts_whatever # default ~/.ssh/known_hosts
   create_vms_templates: True # default: False
   create_lxc_templates: True # default: False
   cluster_name: name-of-proxmox-cluster #(no longer required as it will be discovered)

@@ -1,3 +1,4 @@
+import os
 import re
 import getpass
 import json
@@ -17,6 +18,11 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
 
         self.cfg_data = cfg_data
         self.discovered_proxmox_nodes_information = {}
+
+        self.ssh_known_hosts_file = '~/.ssh/known_hosts'
+
+        if 'ssh_known_hosts_file' in self.cfg_data['proxmox'] and 'proxmox' in self.cfg_data:
+            self.ssh_known_hosts_file = self.cfg_data['proxmox']['ssh_known_hosts_file']
 
 
     def generate_proxmox_node_creds_configuration(self):
@@ -82,8 +88,17 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
         # Create an SSH client instance
         client = paramiko.SSHClient()
 
+        # Load ssh keys
+        client.load_system_host_keys()
+
+        if self.ssh_known_hosts_file.startswith('~'):
+            self.ssh_known_hosts_file = os.path.expanduser(self.ssh_known_hosts_file)
+
+        client.load_host_keys(self.ssh_known_hosts_file)
+
         # Set policy for handling unknown host keys (RejectPolicy for security)
-        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        #client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        #client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
         # Connect to the server
         try:
