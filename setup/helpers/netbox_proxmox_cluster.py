@@ -77,6 +77,11 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
                             break
                     temp_nodes_cn_info[proxmox_node]['sudo_pass'] = sudo_pass
 
+        if self.debug:
+            print("Proxmox nodes connection info")
+            print(json.dumps(temp_nodes_cn_info, indent=4))
+            print()
+
         self.proxmox_nodes_connection_info = temp_nodes_cn_info
 
 
@@ -132,6 +137,12 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
             # Read the output
             output = stdout.read().decode('utf-8')
             error = stderr.read().decode('utf-8')
+
+            if self.debug:
+                print(f"SSH node run command '{run_command}' output")
+                print(output)
+                print()
+
         except paramiko.AuthenticationException:
             print("Authentication failed. Check username and password or SSH keys.")
         except paramiko.SSHException as e:
@@ -181,6 +192,11 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
                     temp_system_info['model'] = temp_system_info.pop('product_name')
                     
                 self.discovered_proxmox_nodes_information[proxmox_node]['system'] = json.loads(json.dumps(temp_system_info))
+
+                if self.debug:
+                    print("Proxmox node system information")
+                    print(json.dumps(temp_system_info, indent=4))
+                    print()
             except json.JSONDecodeError as e:
                 raise ValueError(f"JSON conversion error: {e}")        
 
@@ -221,7 +237,14 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
             try:
                 interface_number = 0
 
-                for interface in json.loads(output):
+                json_ni = json.loads(output)
+
+                if self.debug:
+                    print(f"JSON NETWORK INTERFACES DATA FROM {lshw_command}")
+                    print(json.dumps(json_ni, indent=4))
+                    print()
+
+                for interface in json_ni:
                     if 'id' in interface and interface['id'] == 'network':
                         if not 'logicalname' in interface:
                             continue
@@ -246,8 +269,20 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
                         if ethtool_info['port'] in ethtool_to_netbox_speed_mappings['supported_ports']:
                             if_type = ethtool_to_netbox_speed_mappings['supported_ports'][ethtool_info['port']]
                             max_interface_link_mode = ethtool_info['supported_link_modes'][-1].split('/')[0]
-                            if_type_speed = ethtool_to_netbox_speed_mappings[if_type][max_interface_link_mode]
-                            self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interface['logicalname']]['type'] = if_type_speed
+
+                            if max_interface_link_mode in ethtool_to_netbox_speed_mappings[if_type]:
+                                if self.debug:
+                                    print(f"Found max interface link mode")
+                                    print()
+
+                                if_type_speed = ethtool_to_netbox_speed_mappings[if_type][max_interface_link_mode]
+                                self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interface['logicalname']]['type'] = if_type_speed
+                            else:
+                                if self.debug:
+                                    print("*** No interface link mode found.  Using default (other)")
+                                    print
+
+                                self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interface['logicalname']]['type'] = 'other'
 
                     interface_number += 1
             except json.JSONDecodeError as e:
@@ -291,6 +326,11 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
                         'ipv6address': if_parts[-1],
                     }
         try:
+            if self.debug:
+                print(f"Collected node IP address information")
+                print(json.dumps(proxmox_node_ip_addresses, indent=4))
+                print()
+
             return json.loads(json.dumps(proxmox_node_ip_addresses))
         except json.JSONDecodeError as e:
             raise ValueError(f"JSON conversion error: {e}")    
@@ -332,6 +372,12 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
                 ethtool_settings['duplex'] = 'Auto'
 
         ethtool_settings['duplex'] = ethtool_settings['duplex'].lower()
+
+        if self.debug:
+            print("ETHTOOL SETTINGS")
+            print(json.dumps(ethtool_settings, indent=4))
+            print()
+
         return ethtool_settings
 
 

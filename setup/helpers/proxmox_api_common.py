@@ -13,6 +13,8 @@ class ProxmoxAPICommon:
         self.proxmox_cluster_name = None
         self.proxmox_nodes = {}
 
+        self.debug = False
+        
         self.proxmox_api_config = {
             'api_host': cfg_data['proxmox_api_config']['api_host'],
             'api_port': cfg_data['proxmox_api_config']['api_port'],

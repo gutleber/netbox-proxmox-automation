@@ -29,7 +29,7 @@ class NetBox:
         return {key: self._sanitize_value(key, value) for key, value in self.payload.items()}
     
 
-    def __init__(self, url, token, payload) -> None:
+    def __init__(self, url, token, options, payload) -> None:
         # NetBox API details
         self.netbox_url = url
         self.netbox_token = token
@@ -39,23 +39,26 @@ class NetBox:
         self.multi_obj = None
         self.required_fields = []
 
-        self.__init_api()
+        self.debug = False
+
+        if self.debug:
+            print(f"INCOMING PAYLOAD __init__: {payload}")
+            print()
+
+        self.__init_api(options)
 
 
-    def __init_api(self):
+    def __init_api(self, options: dict):
         # Initialize pynetbox API connection
         try:
             self.nb = pynetbox.api(self.netbox_url, token=self.netbox_token)
 
-            if not 'NB_VERIFY_SSL' in os.environ:
-                raise ValueError("Missing 'NB_VERIFY_SSL' in environment!")
-            
-            if os.environ['NB_VERIFY_SSL'] == "1":
-                self.nb.http_session.verify = True
-            elif os.environ['NB_VERIFY_SSL'] == "0":
-                self.nb.http_session.verify = False
-            else:
-                raise ValueError(f"Unknown env setting for NB_VERIFY_SSL: {os.environ['NB_VERIFY_SSL']}")
+            if options:
+                print(f"INCOMING OPTIONS: {options}")
+                if 'verify_ssl' in options:
+                    self.nb.http_session.verify = options['verify_ssl']
+                else:
+                    self.nb.http_session.verify = False
         except requests.exceptions.SSLError as e:
             raise ValueError(f"SSL error (pynetbox): {e}")
         except pynetbox.RequestError as e:
@@ -67,11 +70,13 @@ class NetBox:
         except NameError as e:
             raise ValueError(f"pynetbox name error: {e}")
 
-        if 'NETBOX_BRANCH' in os.environ:
-            if not 'NETBOX_BRANCH_TIMEOUT' in os.environ:
-                os.environ['NETBOX_BRANCH_TIMEOUT'] = '0'
+        if 'branch' in options:
+            branch_timeout = 0
 
-            self.nbb = NetBoxBranches(self.nb, os.environ['NETBOX_BRANCH'], int(os.environ['NETBOX_BRANCH_TIMEOUT']))
+            if 'branch_timeout' in options:
+                branch_timeout = int(options['branch_timeout'])
+
+            self.nbb = NetBoxBranches(self.nb, options['branch'], branch_timeout)
             self.nbb.activate_branch()        
 
 
@@ -141,9 +146,9 @@ class NetBox:
 
 
 class NetBoxSites(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.sites
         self.required_fields = [ 
             "name",
@@ -156,9 +161,9 @@ class NetBoxSites(NetBox):
 
 
 class NetBoxManufacturers(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.manufacturers
         self.required_fields = [ 
             "name",
@@ -170,9 +175,9 @@ class NetBoxManufacturers(NetBox):
 
 
 class NetBoxPlatforms(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.platforms
         self.required_fields = [ 
             "name",
@@ -184,9 +189,9 @@ class NetBoxPlatforms(NetBox):
 
 
 class NetBoxDeviceTypes(NetBox):
-    def __init__(self, url, token, payload, find_key = 'model') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'model') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.device_types
         self.required_fields = [
             "manufacturer",
@@ -200,9 +205,9 @@ class NetBoxDeviceTypes(NetBox):
 
 
 class NetBoxDeviceTypesInterfaceTemplates(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.interface_templates
         self.required_fields = [
             "device_type",
@@ -215,9 +220,9 @@ class NetBoxDeviceTypesInterfaceTemplates(NetBox):
 
 
 class NetBoxDeviceRoles(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.device_roles
         self.required_fields = [ 
             "name",
@@ -230,9 +235,9 @@ class NetBoxDeviceRoles(NetBox):
 
 
 class NetBoxDevices(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.devices
         self.required_fields = [ 
             "name",
@@ -246,9 +251,9 @@ class NetBoxDevices(NetBox):
 
 
 class NetBoxDevicesInterfaces(NetBox):
-    def __init__(self, url, token, payload, find_key = 'device_id') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'device_id') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.interfaces
         self.required_fields = [ 
             "device_id"
@@ -257,19 +262,19 @@ class NetBoxDevicesInterfaces(NetBox):
         self.findByFilter(self.find_key)
 
 
-class NetBoxDeviceInterfaceMacAddressMapping(NetBox):
-    def __init__(self, url, token, device_id: int, interface_name: str, payload) -> None:
+class NetBoxObjectInterfaceMacAddressMapping(NetBox):
+    def __init__(self, url, token, options, obj_type: str, device_id: int, interface_name: str, payload) -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
 
-        self.__netbox_update_interface_for_proxmox_node_by_device_id(device_id, interface_name, self.payload)
+        self.__netbox_update_interface_for_proxmox_node_by_device_id(obj_type, device_id, interface_name, self.payload)
 
 
-    def __netbox_assign_mac_address_for_proxmox_node_by_object_id(self, assigned_object_id: int, mac_address: str):
+    def __netbox_assign_mac_address_for_proxmox_node_by_object_id(self, assigned_object_id: int, assigned_object_type: str, mac_address: str):
         try:
             mac_address_data = {
                 'mac_address': mac_address,
-                'assigned_object_type': 'dcim.interface',
+                'assigned_object_type': assigned_object_type,
                 'assigned_object_id': assigned_object_id
             }
 
@@ -288,14 +293,14 @@ class NetBoxDeviceInterfaceMacAddressMapping(NetBox):
             raise ValueError(e, e.error)
 
 
-    def __netbox_update_interface_for_proxmox_node_by_device_id(self, device_id: int, interface_name: str, interface_data: dict):
+    def __netbox_update_interface_for_proxmox_node_by_device_id(self, object_type: str, device_id: int, interface_name: str, interface_data: dict):
         try:
             interface = self.nb.dcim.interfaces.get(device_id=device_id, name=interface_name)
 
             if not interface:
                 raise ValueError(f"Interface {interface_name} not found on device id: {device_id}")
 
-            assigned_mac_address = self.__netbox_assign_mac_address_for_proxmox_node_by_object_id(interface.id, interface_data['mac'])
+            assigned_mac_address = self.__netbox_assign_mac_address_for_proxmox_node_by_object_id(interface.id, object_type, interface_data['mac'])
 
             interface.enabled = interface_data['enabled']
 
@@ -310,9 +315,9 @@ class NetBoxDeviceInterfaceMacAddressMapping(NetBox):
 
 
 class NetBoxDeviceCreateBridgeInterface(NetBox):
-    def __init__(self, url, token, payload) -> None:
+    def __init__(self, url, token, options, payload) -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.interfaces
         self.required_fields = [ 
             "device",
@@ -325,9 +330,9 @@ class NetBoxDeviceCreateBridgeInterface(NetBox):
 
 
 class NetBoxTags(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.extras.tags
         self.required_fields = [ 
             "name",
@@ -339,9 +344,9 @@ class NetBoxTags(NetBox):
 
 
 class NetBoxCustomFields(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.extras.custom_fields
         self.required_fields = [ 
             "weight",
@@ -357,9 +362,9 @@ class NetBoxCustomFields(NetBox):
 
 
 class NetBoxCustomFieldChoiceSets(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.extras.custom_field_choice_sets
         self.required_fields = [ 
             "name",
@@ -372,9 +377,9 @@ class NetBoxCustomFieldChoiceSets(NetBox):
 
 
 class NetBoxClusterTypes(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.virtualization.cluster_types
         self.required_fields = [ 
             "name",
@@ -386,9 +391,9 @@ class NetBoxClusterTypes(NetBox):
 
 
 class NetBoxClusterGroups(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.virtualization.cluster_groups
         self.required_fields = [ 
             "name",
@@ -400,9 +405,9 @@ class NetBoxClusterGroups(NetBox):
 
 
 class NetBoxClusters(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.virtualization.clusters
         self.required_fields = [ 
             "name",
@@ -415,9 +420,9 @@ class NetBoxClusters(NetBox):
 
 
 class NetBoxVirtualMachines(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.virtualization.virtual_machines
         self.required_fields = [ 
             "name",
@@ -430,29 +435,37 @@ class NetBoxVirtualMachines(NetBox):
 
 
 class NetBoxVirtualMachineInterface(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
 
-        """
         self.object_type = self.nb.virtualization.interfaces
         self.required_fields = [ 
             "name",
             "virtual_machine"
         ]
-        self.find_key = find_key
-        self.findBy(self.find_key)
-        self.createOrUpdate()
-        """
 
-        self.object_type = self.nb.virtualization.interfaces
-        nb_vm_int = self.object_type.create(payload)
+        if self.debug:
+            print(f"NetBoxVirtualMachineInterface payload: {payload}")
+            print()
+
+        self.find_key_mult = {'virtual_machine_id': self.payload['virtual_machine'], 'name': self.payload['name']}
+        self.findByMulti(self.find_key_mult)
+        self.createOrUpdate()
+
+        if 'mac_address' in self.payload:
+            self.payload['mac'] = self.payload.pop('mac_address')
+
+        if not 'enabled' in self.payload:
+            self.payload['enabled'] = True
+
+        NetBoxObjectInterfaceMacAddressMapping(url, token, options, 'dcim.interface', self.payload['virtual_machine'], self.payload['name'], payload)
         
 
 class NetBoxIPAddresses(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.ipam.ip_addresses
         self.required_fields = [ 
             "address",
@@ -464,9 +477,9 @@ class NetBoxIPAddresses(NetBox):
 
 
 class NetBoxWebhooks(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.extras.webhooks
         self.required_fields = [ 
             'name',
@@ -482,9 +495,9 @@ class NetBoxWebhooks(NetBox):
 
 
 class NetBoxEventRules(NetBox):
-    def __init__(self, url, token, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, payload)
+        super().__init__(url, token, options, payload)
         self.object_type = self.nb.extras.event_rules
         self.required_fields = [ 
             "name",

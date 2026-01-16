@@ -101,10 +101,14 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
     def proxmox_get_vms_configurations(self):
         proxmox_vm_configurations = {}
 
-        #print("ALL PROXMOX VMS", "NODES", self.proxmox_nodes, "VMS", self.proxmox_vms, "LXC", self.proxmox_lxc)
+        if self.debug:
+            print("ALL PROXMOX VMS", "NODES", self.proxmox_nodes, "VMS", self.proxmox_vms, "LXC", self.proxmox_lxc)
+
         for proxmox_vm in self.proxmox_vms:
             proxmox_vm_config = self.proxmox_api.nodes(self.proxmox_vms[proxmox_vm]['node']).qemu(self.proxmox_vms[proxmox_vm]['vmid']).config.get()
-            print(" -- CONFIG", proxmox_vm_config)
+
+            if self.debug:
+                print(" -- CONFIG", proxmox_vm_config)
 
             if not proxmox_vm in proxmox_vm_configurations:
                 proxmox_vm_configurations[proxmox_vm] = {}
@@ -131,12 +135,20 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
                     proxmox_vm_configurations[proxmox_vm]['disks'] = []
 
                 for proxmox_vm_disk in proxmox_vm_disks:
+                    if self.debug:
+                        print(f"PVMD: {proxmox_vm_disk} ||| {proxmox_vm_config[proxmox_vm_disk]}")
+                        print()
+
                     tmp_disk_name = {}
 
                     disk_info = proxmox_vm_config[proxmox_vm_disk].split(',')[0]
                     storage_volume = disk_info.split(':')[0]
                     disk_size = proxmox_vm_config[proxmox_vm_disk].split(',')[-1]
-                    get_disk_size = re.search(r'^size=(\d+)([MG])$', disk_size)
+                    get_disk_size = re.search(r'size=(\d+)([MG]{1})', proxmox_vm_config[proxmox_vm_disk])
+
+                    if self.debug:
+                        print(f"GDS: {get_disk_size}")
+                        print()
 
                     if get_disk_size.group(2) == "M":
                         disk_size = get_disk_size.group(1)
@@ -144,6 +156,10 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
                         disk_size = int(get_disk_size.group(1)) * 1024
                     else:
                         raise ValueError(f"Unknown disk size metric: {get_disk_size.group(2)}")
+                    
+                    if self.debug:
+                        print(f"DISK SIZE: {disk_size}")
+                        print()
 
                     tmp_disk_name[proxmox_vm_disk] = str(disk_size)
                     proxmox_vm_configurations[proxmox_vm]['disks'].append({'disk_name': proxmox_vm_disk, 'disk_size': tmp_disk_name[proxmox_vm_disk], 'proxmox_disk_storage_volume': storage_volume})
@@ -154,7 +170,8 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
                     if not 'network_interfaces' in proxmox_vm_configurations[proxmox_vm]:
                         proxmox_vm_configurations[proxmox_vm]['network_interfaces'] = {}
 
-                    #print("    -- NETWORK INTERFACES", self.proxmox_api.nodes(self.proxmox_vms[proxmox_vm]['node']).qemu(self.proxmox_vms[proxmox_vm]['vmid']).agent('network-get-interfaces').get())
+                    if self.debug:
+                        print("    -- NETWORK INTERFACES", self.proxmox_api.nodes(self.proxmox_vms[proxmox_vm]['node']).qemu(self.proxmox_vms[proxmox_vm]['vmid']).agent('network-get-interfaces').get())
 
                     for ni_info in self.proxmox_api.nodes(self.proxmox_vms[proxmox_vm]['node']).qemu(self.proxmox_vms[proxmox_vm]['vmid']).agent('network-get-interfaces').get()['result']:
                         network_interface_name = ni_info['name']
@@ -176,8 +193,11 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
                 except proxmoxer.core.ResourceException as e:
                     if e.status_code == 500 and e.content == 'No QEMU guest agent configured':
                         print(f"- (SKIPPING) {e.content} for Proxmox VM {self.proxmox_vms[proxmox_vm]['vmid']}")
+                        print()
 
-        #print("PXMXRVM", proxmox_vm_configurations)
+        if self.debug:
+            print("PXMXRVM", proxmox_vm_configurations)
+
         return proxmox_vm_configurations
 
 
