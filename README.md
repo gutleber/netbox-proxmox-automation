@@ -40,6 +40,7 @@ If you see errors like this...
  Try uninstalling `mkdocs` from your package manager, (e.g. `brew uninstall mkdocs`) and just using the version installed by `pip`. It seems that `mkdocs` doesn't like it when you've installed it using different methods.
 
 # What's New in 2025.11.X
+  - *Only* supports NetBox versions >= 4.2
   - Switches to calendar (as opposed to semantic) versioning
   - Adds Proxmox cluster and node(s) discovery through a new convenience script
   - Adds Proxmox VM migration to alternate Proxmox node(s) through events
@@ -51,6 +52,7 @@ If you see errors like this...
 # Known Issues / Roadmap
 
 ## Known Issues
+- Might not support Proxmox v9 as of yet
 - *Only* supports SCSI disk types (this is possibly fine as Proxmox predomininantly provisions disks as SCSI)
 - LXC migration is not supported for myriad reasons
 - Proxmox "tags" are not supported (seeking community feedback around use cases)
