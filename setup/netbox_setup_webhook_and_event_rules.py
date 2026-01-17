@@ -18,6 +18,7 @@ def get_arguments():
 
     # Add arguments for URL and Token
     parser.add_argument("--config", required=True, help="YAML file containing the configuration")
+    parser.add_argument("--debug", action='store_true', default=False, help="Enable debug (verbose) output")
 
     # Parse the arguments
     args = parser.parse_args()
@@ -33,17 +34,19 @@ def create_authorization_header(username = None, password = None):
     return f"Authorization: Basic {awx_api_login_str_auth}"
 
 
-def netbox_create_webhook(netbox_url, netbox_api_token, payload):
-    created_webhook = NetBoxWebhooks(netbox_url, netbox_api_token, payload)
+def netbox_create_webhook(netbox_url, netbox_api_token, nb_options: dict, payload):
+    created_webhook = NetBoxWebhooks(netbox_url, netbox_api_token, nb_options, payload)
     return dict(created_webhook.obj)['id'], dict(created_webhook.obj)['name']
 
 
-def netbox_create_event_rule(netbox_url, netbox_api_token, payload):
-    created_event_rule = NetBoxEventRules(netbox_url, netbox_api_token, payload)
+def netbox_create_event_rule(netbox_url, netbox_api_token, nb_options: dict, payload):
+    created_event_rule = NetBoxEventRules(netbox_url, netbox_api_token, nb_options, payload)
     return dict(created_event_rule.obj)['id'], dict(created_event_rule.obj)['name']
 
 
 def main():
+    global DEBUG
+
     netbox_webhook_payload = {}
     netbox_event_rule_payload = {}
     collected_netbox_webhook_payload = {}
@@ -51,10 +54,19 @@ def main():
     args = get_arguments()
 
     app_config_file = args.config
+    DEBUG = args.debug
 
+    if DEBUG:
+        print(f"ARGS: {args}")
+        print()
+        
     with open(app_config_file) as yaml_cfg:
         try:
             app_config = yaml.safe_load(yaml_cfg)
+
+            if DEBUG:
+                print(f"APP CONFIG: {app_config}")
+                print()
         except yaml.YAMLError as exc:
             raise ValueError(exc)
         except IOError as ioe:
@@ -62,6 +74,25 @@ def main():
 
     netbox_url = f"{app_config['netbox_api_config']['api_proto']}://{app_config['netbox_api_config']['api_host']}:{app_config['netbox_api_config']['api_port']}/"
     netbox_api_token = f"{app_config['netbox_api_config']['api_token']}"
+    nb_options = {}
+
+    if 'verify_ssl' in app_config['netbox_api_config']:
+        nb_options['verify_ssl'] = app_config['netbox_api_config']['verify_ssl']
+    else:
+        nb_options['verify_ssl'] = False
+
+    if 'branch' in app_config['netbox']:
+        branch_name = app_config['netbox']['branch']
+
+        nb_options['branch'] = branch_name
+
+        branch_timeout = 0
+        if 'branch_timeout' in app_config['netbox']:
+            branch_timeout = int(app_config['netbox']['branch_timeout'])
+
+        nb_options['branch_timeout'] = branch_timeout
+    
+    nb_options['debug'] = DEBUG
 
     if not 'automation_type' in app_config:
         raise ValueError("app_config is missing definition for 'automation_type'")
@@ -572,7 +603,7 @@ def main():
         netbox_webhook_payload['additional_headers'] = ''
         netbox_webhook_payload['body_template'] = ''
 
-        netbox_webhook_id, netbox_webhook_name_returned = netbox_create_webhook(netbox_url, netbox_api_token, netbox_webhook_payload)
+        netbox_webhook_id, netbox_webhook_name_returned = netbox_create_webhook(netbox_url, netbox_api_token, nb_options, netbox_webhook_payload)
 
         if not netbox_webhook_id:
             raise ValueError(f"Unable to create webhook for {netbox_webhook_payload['name']}")
@@ -587,7 +618,7 @@ def main():
             netbox_event_rule_payload['action_object_id'] = netbox_webhook_id
             netbox_event_rule_payload['conditions'] = netbox_proxmox_event_rules[event_rule]['conditions']
 
-            if not netbox_create_event_rule(netbox_url, netbox_api_token, netbox_event_rule_payload):
+            if not netbox_create_event_rule(netbox_url, netbox_api_token, nb_options, netbox_event_rule_payload):
                 raise ValueError(f"Unable to create event rule {netbox_event_rule_payload['name']}")
     elif app_config['automation_type'] == 'ansible_automation':
         ansible_automation_webhook_body_templates = {
@@ -621,7 +652,7 @@ def main():
                 
         awx_project_name = app_config['ansible_automation']['settings']['project']['name']
 
-        aam = AnsibleAutomationAWXManager(app_config)
+        aam = AnsibleAutomationAWXManager(app_config, nb_options)
 
         aam.get_project(awx_project_name)
         project_playbooks = aam.get_playbooks()
@@ -657,7 +688,7 @@ def main():
                 netbox_webhook_payload['body_template'] = ''
                 continue
 
-            netbox_webhook_id, netbox_webhook_name_returned = netbox_create_webhook(netbox_url, netbox_api_token, netbox_webhook_payload)
+            netbox_webhook_id, netbox_webhook_name_returned = netbox_create_webhook(netbox_url, netbox_api_token, nb_options, netbox_webhook_payload)
 
             if not netbox_webhook_id:
                 raise ValueError(f"Unable to create webhook for {netbox_webhook_payload['name']}")
@@ -678,7 +709,7 @@ def main():
             netbox_event_rule_payload['action_object_id'] = collected_netbox_webhook_payload[collected_netbox_webhook]
             netbox_event_rule_payload['conditions'] = netbox_proxmox_event_rules[collected_netbox_webhook]['conditions']
 
-            if not netbox_create_event_rule(netbox_url, netbox_api_token, netbox_event_rule_payload):
+            if not netbox_create_event_rule(netbox_url, netbox_api_token, nb_options, netbox_event_rule_payload):
                 print(f"Unable to create event rule {netbox_event_rule_payload['name']}")
                 sys.exit(1)
     else:
