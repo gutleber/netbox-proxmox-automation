@@ -138,13 +138,13 @@ class NetBox:
             if self.hasRequired:
                 self.object_type.create(self.payload)
                 if 'name' in self.payload:
-                    print(f"Object (has required) '{self.payload['name']}' created successfully.")
+                    print(f"Object (has required) created successfully with sanitized payload: '{self._sanitize_payload()}'.")
                     if hasattr(self, 'find_key_mult'):
                         self.findByMulti(self.find_key_mult)
                     else:
                         self.findBy('name')
                 elif 'model' in self.payload:
-                    print(f"Object (has required) '{self.payload['model']}' created successfully.")
+                    print(f"Object (has required) created successfully with sanitized payload: '{self._sanitize_payload()}'.")
                     self.findBy('model')
 
 
