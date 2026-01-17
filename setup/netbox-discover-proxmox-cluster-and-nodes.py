@@ -105,7 +105,9 @@ def main():
             branch_timeout = int(app_config['netbox']['branch_timeout'])
 
         nb_options['branch_timeout'] = branch_timeout
-
+    
+    nb_options['debug'] = DEBUG
+    
     nb_pxmx_cluster = NetBoxProxmoxCluster(app_config)
     nb_pxmx_cluster.debug = DEBUG
 
@@ -122,9 +124,6 @@ def main():
     nb_pxmx_cluster.get_proxmox_nodes_system_information()
     nb_pxmx_cluster.get_proxmox_nodes_network_interfaces()
     discovered_proxmox_nodes_information = nb_pxmx_cluster.discovered_proxmox_nodes_information
-
-    #print("DISCOVERED PROXMOX NODES INFORMATION", discovered_proxmox_nodes_information)
-    #print(nb_pxmx_cluster.proxmox_nodes['pxmx-n1'])
 
     try:
         netbox_site_id = dict(NetBoxSites(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': netbox_site, 'slug': __netbox_make_slug(netbox_site), 'status': 'active'}).obj)['id']

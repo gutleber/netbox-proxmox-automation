@@ -39,7 +39,7 @@ class NetBox:
         self.multi_obj = None
         self.required_fields = []
 
-        self.debug = False
+        self.debug = options['debug']
 
         if self.debug:
             print(f"INCOMING PAYLOAD __init__: {payload}")
@@ -53,12 +53,14 @@ class NetBox:
         try:
             self.nb = pynetbox.api(self.netbox_url, token=self.netbox_token)
 
-            if options:
-                print(f"INCOMING OPTIONS: {options}")
-                if 'verify_ssl' in options:
-                    self.nb.http_session.verify = options['verify_ssl']
-                else:
-                    self.nb.http_session.verify = False
+            if self.debug:
+                print(f"INCOMING OPTIONS __init_api: {options}")
+                print()
+
+            if 'verify_ssl' in options:
+                self.nb.http_session.verify = options['verify_ssl']
+            else:
+                self.nb.http_session.verify = False
         except requests.exceptions.SSLError as e:
             raise ValueError(f"SSL error (pynetbox): {e}")
         except pynetbox.RequestError as e:
@@ -297,17 +299,15 @@ class NetBoxObjectInterfaceMacAddressMapping(NetBox):
         try:
             interface = self.nb.dcim.interfaces.get(device_id=device_id, name=interface_name)
 
-            if not interface:
-                raise ValueError(f"Interface {interface_name} not found on device id: {device_id}")
-
-            assigned_mac_address = self.__netbox_assign_mac_address_for_proxmox_node_by_object_id(interface.id, object_type, interface_data['mac'])
+            if interface:
+                interface_mac = self.__netbox_assign_mac_address_for_proxmox_node_by_object_id(interface.id, object_type, interface_data['mac'])
 
             interface.enabled = interface_data['enabled']
 
-            if 'id' in assigned_mac_address:
-                interface.primary_mac_address = assigned_mac_address['id']
+            if 'id' in interface:
+                interface.primary_mac_address = interface_mac['id']
             else:
-                interface.primary_mac_address = assigned_mac_address.id
+                interface.primary_mac_address = interface_mac.id            
 
             interface.save()
         except pynetbox.RequestError as e:
