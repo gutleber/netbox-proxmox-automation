@@ -42,7 +42,8 @@ class NetBox:
         self.debug = options['debug']
 
         if self.debug:
-            print(f"INCOMING PAYLOAD __init__: {payload}")
+            # Log a sanitized version of the payload to avoid exposing sensitive data
+            print(f"INCOMING PAYLOAD __init__: {self._sanitize_payload()}")
             print()
 
         self.__init_api(options)
