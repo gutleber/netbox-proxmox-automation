@@ -13,7 +13,7 @@ import urllib3
 
 from helpers.netbox_proxmox_cluster import NetBoxProxmoxCluster
 #from helpers.netbox_proxmox_api import NetBoxProxmoxAPIHelper
-from helpers.netbox_objects import __netbox_make_slug, NetBox, NetBoxSites, NetBoxManufacturers, NetBoxPlatforms, NetBoxTags, NetBoxDeviceRoles, NetBoxDeviceTypes, NetBoxDeviceTypesInterfaceTemplates, NetBoxDevices, NetBoxDevicesInterfaces, NetBoxDeviceInterfaceMacAddressMapping, NetBoxDeviceCreateBridgeInterface, NetBoxClusterTypes, NetBoxClusters, NetBoxClusterGroups, NetBoxVirtualMachines, NetBoxVirtualMachineInterface, NetBoxIPAddresses
+from helpers.netbox_objects import __netbox_make_slug, NetBox, NetBoxSites, NetBoxManufacturers, NetBoxPlatforms, NetBoxTags, NetBoxDeviceRoles, NetBoxDeviceTypes, NetBoxDeviceTypesInterfaceTemplates, NetBoxDevices, NetBoxDevicesInterfaces, NetBoxObjectInterfaceMacAddressMapping, NetBoxDeviceCreateBridgeInterface, NetBoxClusterTypes, NetBoxClusters, NetBoxClusterGroups, NetBoxVirtualMachines, NetBoxVirtualMachineInterface, NetBoxIPAddresses
 
 from proxmoxer import ProxmoxAPI, ResourceException
 
@@ -25,6 +25,7 @@ def get_arguments():
     parser = argparse.ArgumentParser(description="Import Proxmox Cluster (optional) and Nodes Configurations")
 
     parser.add_argument("--config", required=True, help="YAML file containing the configuration")
+    parser.add_argument("--debug", action='store_true', default=False, help="Enable debug (verbose) output")
 
     # Parse the arguments
     args = parser.parse_args()
@@ -58,10 +59,10 @@ def get_proxmox_node_vmbr_network_interface_mapping(proxmox_api_config: dict, pr
         
         return proxmox_vmbrX_network_interface_mapping
     except ResourceException as e:
-        print("E", e, dir(e), e.status_code, e.status_message, e.errors)
+        print("Proxmox Resource Exception encountered", e, dir(e), e.status_code, e.status_message, e.errors)
         if e.errors:
             if 'vmid' in e.errors:
-                print("F", e.errors['vmid'])
+                print("  - for vmid:", e.errors['vmid'])
 
     return {}
 
@@ -71,40 +72,49 @@ def main():
     discovered_proxmox_nodes_information = {}
 
     args = get_arguments()
-    #print("ARGS", args, args.config)
+
+    DEBUG = args.debug
+
+    if DEBUG:
+        print("ARGS", args, args.config)
 
     try:
         with open(args.config, 'r') as cfg_f:
             app_config = yaml.safe_load(cfg_f)
+
+        if DEBUG:
+            print(f"CONFIGURATION DATA {app_config}")
     except yaml.YAMLError as exc:
         print(exc)
 
-    #print("CFG DATA", app_config, app_config['proxmox_api_config'])
-
     nb_url = f"{app_config['netbox_api_config']['api_proto']}://{app_config['netbox_api_config']['api_host']}:{str(app_config['netbox_api_config']['api_port'])}/"
+    nb_options = {}
 
-    if 'verify_ssl' in app_config['netbox_api_config'] and app_config['netbox_api_config']['api_proto'] == 'https':
-        os.environ['NB_VERIFY_SSL'] = str(int(app_config['netbox_api_config']['verify_ssl']))
+    if 'verify_ssl' in app_config['netbox_api_config']:
+        nb_options['verify_ssl'] = app_config['netbox_api_config']['verify_ssl']
     else:
-        os.environ['NB_VERIFY_SSL'] = "0"
+        nb_options['verify_ssl'] = False
 
     if 'branch' in app_config['netbox']:
         branch_name = app_config['netbox']['branch']
-        os.environ['NETBOX_BRANCH'] = branch_name
+
+        nb_options['branch'] = branch_name
 
         branch_timeout = 0
         if 'branch_timeout' in app_config['netbox']:
-            branch_timeout = app_config['netbox']['branch_timeout']
-        os.environ['NETBOX_BRANCH_TIMEOUT'] = str(branch_timeout)
+            branch_timeout = int(app_config['netbox']['branch_timeout'])
 
+        nb_options['branch_timeout'] = branch_timeout
+    
+    nb_options['debug'] = DEBUG
+    
     nb_pxmx_cluster = NetBoxProxmoxCluster(app_config)
+    nb_pxmx_cluster.debug = DEBUG
 
     if not 'site' in app_config['netbox']:
         netbox_site = "netbox-proxmox-automation Default Site"
     else:
         netbox_site = app_config['netbox']['site']
-
-    #nb_pxmx_cluster.get_proxmox_cluster_info()
 
     # Collect Proxmox node login information
     nb_pxmx_cluster.generate_proxmox_node_creds_configuration()
@@ -115,11 +125,8 @@ def main():
     nb_pxmx_cluster.get_proxmox_nodes_network_interfaces()
     discovered_proxmox_nodes_information = nb_pxmx_cluster.discovered_proxmox_nodes_information
 
-    #print("DISCOVERED PROXMOX NODES INFORMATION", discovered_proxmox_nodes_information)
-    #print(nb_pxmx_cluster.proxmox_nodes['pxmx-n1'])
-
     try:
-        netbox_site_id = dict(NetBoxSites(nb_url, app_config['netbox_api_config']['api_token'], {'name': netbox_site, 'slug': __netbox_make_slug(netbox_site), 'status': 'active'}).obj)['id']
+        netbox_site_id = dict(NetBoxSites(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': netbox_site, 'slug': __netbox_make_slug(netbox_site), 'status': 'active'}).obj)['id']
     except pynetbox.RequestError as e:
         raise ValueError(e, e.error)
 
@@ -130,7 +137,7 @@ def main():
         else:
             proxmox_cluster_type = default_proxmox_cluster_type
 
-        netbox_cluster_type_id = dict(NetBoxClusterTypes(nb_url, app_config['netbox_api_config']['api_token'], {'name': proxmox_cluster_type, 'slug': __netbox_make_slug(proxmox_cluster_type)}).obj)['id']
+        netbox_cluster_type_id = dict(NetBoxClusterTypes(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': proxmox_cluster_type, 'slug': __netbox_make_slug(proxmox_cluster_type)}).obj)['id']
     except pynetbox.RequestError as e:
         raise ValueError(e, e.error)        
 
@@ -140,12 +147,12 @@ def main():
         else:
             cluster_group = netbox_site
 
-        netbox_cluster_group_id = dict(NetBoxClusterGroups(nb_url, app_config['netbox_api_config']['api_token'], {'name': cluster_group, 'slug': __netbox_make_slug(cluster_group)}).obj)['id']
+        netbox_cluster_group_id = dict(NetBoxClusterGroups(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': cluster_group, 'slug': __netbox_make_slug(cluster_group)}).obj)['id']
     except pynetbox.RequestError as e:
         raise ValueError(e, e.error)        
 
     try:
-        netbox_cluster_id = dict(NetBoxClusters(nb_url, app_config['netbox_api_config']['api_token'], {'name': nb_pxmx_cluster.proxmox_cluster_name, 'type': netbox_cluster_type_id, 'group': netbox_cluster_group_id, 'status': 'active'}).obj)['id']
+        netbox_cluster_id = dict(NetBoxClusters(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': nb_pxmx_cluster.proxmox_cluster_name, 'type': netbox_cluster_type_id, 'group': netbox_cluster_group_id, 'status': 'active'}).obj)['id']
     except pynetbox.RequestError as e:
         raise ValueError(e, e.error)        
 
@@ -153,7 +160,7 @@ def main():
         # Create Manufacturer in NetBox
         try:
             manufacturer_name = discovered_proxmox_nodes_information[proxmox_node]['system']['manufacturer']
-            netbox_manufacturer_id = dict(NetBoxManufacturers(nb_url, app_config['netbox_api_config']['api_token'], {'name': manufacturer_name, 'slug': __netbox_make_slug(manufacturer_name)}).obj)['id']
+            netbox_manufacturer_id = dict(NetBoxManufacturers(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': manufacturer_name, 'slug': __netbox_make_slug(manufacturer_name)}).obj)['id']
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
 
@@ -163,21 +170,21 @@ def main():
         
         try:
             proxmox_version = nb_pxmx_cluster.proxmox_nodes[proxmox_node]['version']
-            netbox_platform_id = dict(NetBoxPlatforms(nb_url, app_config['netbox_api_config']['api_token'], {'name': proxmox_version, 'slug': __netbox_make_slug(proxmox_version)}).obj)['id']
+            netbox_platform_id = dict(NetBoxPlatforms(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': proxmox_version, 'slug': __netbox_make_slug(proxmox_version)}).obj)['id']
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)        
 
         # Create NetBox Device Role
         try:
             device_role_name = app_config['netbox']['device_role']
-            netbox_device_role_id = dict(NetBoxDeviceRoles(nb_url, app_config['netbox_api_config']['api_token'], {'name': device_role_name, 'slug': __netbox_make_slug(device_role_name), 'vm_role': False}).obj)['id']
+            netbox_device_role_id = dict(NetBoxDeviceRoles(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': device_role_name, 'slug': __netbox_make_slug(device_role_name), 'vm_role': False}).obj)['id']
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
 
         # Create Device Type in NetBox
         try:
             device_model = nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['model']
-            netbox_device_type_id = dict(NetBoxDeviceTypes(nb_url, app_config['netbox_api_config']['api_token'], {'manufacturer': netbox_manufacturer_id, 'model': device_model, 'slug': __netbox_make_slug(device_model), 'u_height': 1}).obj)['id']
+            netbox_device_type_id = dict(NetBoxDeviceTypes(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'manufacturer': netbox_manufacturer_id, 'model': device_model, 'slug': __netbox_make_slug(device_model), 'u_height': 1}).obj)['id']
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
 
@@ -186,11 +193,13 @@ def main():
             if network_interface.startswith('vmbr'):
                 continue
 
-            #print(f"network interface: {network_interface}")
+            if DEBUG:
+                print(f"Looking at network interface {network_interface} on {proxmox_node}")
+                print()
 
             try:
                 network_interface_type = nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][network_interface]['type']
-                NetBoxDeviceTypesInterfaceTemplates(nb_url, app_config['netbox_api_config']['api_token'], {'device_type': netbox_device_type_id, 'name': network_interface, 'type': network_interface_type, 'enabled': False})
+                NetBoxDeviceTypesInterfaceTemplates(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'device_type': netbox_device_type_id, 'name': network_interface, 'type': network_interface_type, 'enabled': False})
             except pynetbox.RequestError as e:
                 raise ValueError(e, e.error)
 
@@ -202,7 +211,8 @@ def main():
 
             # If no serial or empty string, use a generated one or skip
             if not device_serial or device_serial.strip() == '':
-                print(f"Warning: No serial found for {proxmox_node}, creating device without serial")
+                if DEBUG:
+                    print(f"Warning: No serial found for {proxmox_node}, creating device without serial")
 
             device_payload = {
                 'name': proxmox_node,
@@ -218,7 +228,7 @@ def main():
             if device_serial:
                 device_payload['serial'] = device_serial
 
-            netbox_device_id = dict(NetBoxDevices(nb_url, app_config['netbox_api_config']['api_token'], device_payload).obj)['id']
+            netbox_device_id = dict(NetBoxDevices(nb_url, app_config['netbox_api_config']['api_token'], nb_options, device_payload).obj)['id']
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
 
@@ -226,7 +236,7 @@ def main():
             raise ValueError(f"NetBox missing device id for {proxmox_node}, device type id {netbox_device_type_id}")
 
         try:
-            device_interfaces = list(NetBoxDevicesInterfaces(nb_url, app_config['netbox_api_config']['api_token'], {'device_id': netbox_device_id}).multi_obj)
+            device_interfaces = list(NetBoxDevicesInterfaces(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'device_id': netbox_device_id}).multi_obj)
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
     
@@ -234,15 +244,21 @@ def main():
             if device_interface.name.startswith('vmbr'):
                 continue
 
-            print(f"device: {proxmox_node}, interface: {device_interface.name} ({device_interface.type}) [MAC address redacted]")
+            if DEBUG:
+                print(f"device: {proxmox_node}, interface: {device_interface.name} ({device_interface.type}) [MAC address redacted]")
 
             try:
-                NetBoxDeviceInterfaceMacAddressMapping(nb_url, app_config['netbox_api_config']['api_token'], netbox_device_id, device_interface, nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][device_interface.name])            
+                NetBoxObjectInterfaceMacAddressMapping(nb_url, app_config['netbox_api_config']['api_token'], nb_options, 'dcim.interface', netbox_device_id, device_interface, nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][device_interface.name])            
             except pynetbox.RequestError as e:
                 raise ValueError(e, e.error)
 
             # Create bridge interface name: vmbrX, bridge: device_interface.id
             vmbr_info = get_proxmox_node_vmbr_network_interface_mapping(app_config['proxmox_api_config'], proxmox_node, device_interface.name)
+
+            if DEBUG:
+                print("Proxmox interface mapping info")
+                print(json.dumps(vmbr_info, indent=4))
+                print()
 
             if vmbr_info:
                 if device_interface.name in vmbr_info:
@@ -255,7 +271,7 @@ def main():
                             'enabled': True
                         }
 
-                        nb_bridge_interface = NetBoxDeviceCreateBridgeInterface(nb_url, app_config['netbox_api_config']['api_token'], vmbrX_interface_data)
+                        nb_bridge_interface = NetBoxDeviceCreateBridgeInterface(nb_url, app_config['netbox_api_config']['api_token'], nb_options, vmbrX_interface_data)
                     except pynetbox.RequestError as e:
                         raise ValueError(e, e.error)
 
@@ -269,7 +285,7 @@ def main():
                         }
 
                         try:
-                            ipv4_address = NetBoxIPAddresses(nb_url, app_config['netbox_api_config']['api_token'], nb_assign_ip_address_payload, 'address')
+                            ipv4_address = NetBoxIPAddresses(nb_url, app_config['netbox_api_config']['api_token'], nb_options, nb_assign_ip_address_payload, 'address')
                         except pynetbox.RequestError as e:
                             raise ValueError(e, e.error)
 
@@ -283,19 +299,15 @@ def main():
                         'assigned_object_id': str(device_interface.id)
                     }
 
+                    if DEBUG:
+                        print("NetBox assign IP address payload")
+                        print(json.dumps(nb_assign_ip_address_payload, indent=4))
+                        print()
+
                     try:
-                        ipv4_address = NetBoxIPAddresses(nb_url, app_config['netbox_api_config']['api_token'], nb_assign_ip_address_payload, 'address')
+                        ipv4_address = NetBoxIPAddresses(nb_url, app_config['netbox_api_config']['api_token'], nb_options, nb_assign_ip_address_payload, 'address')
                     except pynetbox.RequestError as e:
                         raise ValueError(e, e.error)
-
-    """
-    # If there are no changes, and branch is defined, then delete the branch
-    if 'NETBOX_BRANCH' in os.environ and hasattr(ipv4_address, 'nbb'):
-        if not ipv4_address.nbb.branch_changes():
-            print(f"No changes.  Deleting branch {ipv4_address.nbb.branch_name}")
-            del ipv4_address.nb.http_session.headers['X-NetBox-Branch']
-            ipv4_address.nbb.delete_branch()    
-    """
 
 
 if __name__ == "__main__":

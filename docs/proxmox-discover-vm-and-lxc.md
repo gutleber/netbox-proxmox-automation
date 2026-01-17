@@ -25,6 +25,14 @@ shell$ pip install -r requirements.txt
 
 Follow the steps above, then: `./netbox-discovery-tool.py vm --config /path/to/your-config.yml`
 
+If you need debug (verbose) output, then: `./netbox-discovery-tool.py --debug vm --config /path/to/your-config.yml`
+
+*NOTE that the --debug option comes first*
+
 ## To Discover Proxmox LXCs
 
 Follow the steps above, then: `./netbox-discovery-tool.py lxc --config /path/to/your-config.yml`
+
+If you need debug (verbose) output, then: `./netbox-discovery-tool.py --debug lxc --config /path/to/your-config.yml`
+
+*NOTE that the --debug option comes first*

@@ -1,6 +1,6 @@
 # Discover Proxmox Clusters and Nodes
 
-Starting with `netbox-proxmox-automation` 2025.11.01, you are able to discover Proxmox cluster and nodes information by way of a convenience script, `netbox-discover-proxmox-cluster-and-nodes.py`.  `netbox-discover-proxmox-cluster-and-nodes.py` is located under the `setup` directory; you should run this script *before* attempting to "discover" VMs and/or LXCs and importing them into NetBox.
+Starting with `netbox-proxmox-automation` 2025.11.X, you are able to discover Proxmox cluster and nodes information by way of a convenience script, `netbox-discover-proxmox-cluster-and-nodes.py`.  `netbox-discover-proxmox-cluster-and-nodes.py` is located under the `setup` directory; you should run this script *before* attempting to "discover" VMs and/or LXCs and importing them into NetBox.
 
 *Note that you must follow the steps in [this document](./netbox-customization.md) before running this convenience script!*
 
@@ -46,6 +46,12 @@ shell$ source venv/bin/activate
 shell$ pip install -r requirements.txt
 
 shell$ ./netbox-discover-proxmox-cluster-and-nodes.py --config ../path/to/your-config.yml
+```
+
+If you require debug (verbose) output, run this instead:
+
+```
+shell$ ./netbox-discover-proxmox-cluster-and-nodes.py --config ../path/to/your-config.yml --debug
 ```
 
 *Note that you will need one config file for each Proxmox cluster, or in the case of multiple, single Proxmox nodes, you will need a config file for each of those.*

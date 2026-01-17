@@ -44,6 +44,13 @@ If you see errors like this...
   - Adds Proxmox cluster and node(s) discovery through a new convenience script
   - Adds Proxmox VM migration to alternate Proxmox node(s) through events
   - Adds [NetBox Branching](https://netboxlabs.com/docs/extensions/branching/) support for Proxmox node and VM discovery
+  - Refactors how branching and SSL options are handled
+  - Adds --debug option to convenience scripts
+
+# System Requirements
+  - NetBox 4.2 or newer.  This is because of a change to mac address modeling, which is imcompatible with previous versions of the NetBox API.
+  - Proxmox 8.x.  Proxmox 9.x has not yet been tested (YMWV).
+  - Python 3.12 or newer on the system where you are running NetBox (this is effectively also a dependency with NetBox 4.4 and certain plugins).
 
 # Developers
 - Nate Patwardhan &lt;npatwardhan@netboxlabs.com&gt;
@@ -51,6 +58,8 @@ If you see errors like this...
 # Known Issues / Roadmap
 
 ## Known Issues
+- Might not support Proxmox v9 as of yet
+- Can't map all interface types/speeds to NetBox interface objects, so defaults to 'other' if not able to be mapped
 - *Only* supports SCSI disk types (this is possibly fine as Proxmox predomininantly provisions disks as SCSI)
 - LXC migration is not supported for myriad reasons
 - Proxmox "tags" are not supported (seeking community feedback around use cases)
