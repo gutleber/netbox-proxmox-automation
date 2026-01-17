@@ -302,14 +302,14 @@ class NetBoxObjectInterfaceMacAddressMapping(NetBox):
             if interface:
                 interface_mac = self.__netbox_assign_mac_address_for_proxmox_node_by_object_id(interface.id, object_type, interface_data['mac'])
 
-            interface.enabled = interface_data['enabled']
+                interface.enabled = interface_data['enabled']
 
-            if 'id' in interface:
-                interface.primary_mac_address = interface_mac['id']
-            else:
-                interface.primary_mac_address = interface_mac.id            
+                if 'id' in interface:
+                    interface.primary_mac_address = interface_mac['id']
+                else:
+                    interface.primary_mac_address = interface_mac.id            
 
-            interface.save()
+                interface.save()
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
 
@@ -435,14 +435,15 @@ class NetBoxVirtualMachines(NetBox):
 
 
 class NetBoxVirtualMachineInterface(NetBox):
-    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, obj_type, payload, find_key = 'name') -> None:
         # Initialize the Netbox superclass with URL and token
         super().__init__(url, token, options, payload)
 
         self.object_type = self.nb.virtualization.interfaces
         self.required_fields = [ 
             "name",
-            "virtual_machine"
+            "virtual_machine",
+            "mac_address"
         ]
 
         if self.debug:
@@ -459,7 +460,53 @@ class NetBoxVirtualMachineInterface(NetBox):
         if not 'enabled' in self.payload:
             self.payload['enabled'] = True
 
-        NetBoxObjectInterfaceMacAddressMapping(url, token, options, 'dcim.interface', self.payload['virtual_machine'], self.payload['name'], payload)
+        self.__netbox_update_interface_for_proxmox_node_by_vm_id(obj_type, self.payload['virtual_machine'], self.payload['name'], self.payload)
+
+
+    def __netbox_assign_mac_address_for_vm_interface_by_object_id(self, assigned_object_id: int, assigned_object_type: str, mac_address: str):
+        try:
+            mac_address_data = {
+                'mac_address': mac_address,
+                'assigned_object_type': assigned_object_type,
+                'assigned_object_id': assigned_object_id
+            }
+
+            check_mac_address = self.nb.dcim.mac_addresses.get(assigned_object_id=assigned_object_id, mac_address=mac_address)
+
+            if not check_mac_address:
+                new_mac_address = self.nb.dcim.mac_addresses.create(**mac_address_data)
+
+                if not new_mac_address:
+                    raise ValueError(f"Unable to create mac address {mac_address} for interface id: {assigned_object_id}")
+
+                return new_mac_address
+
+            return check_mac_address        
+        except pynetbox.RequestError as e:
+            raise ValueError(e, e.error)
+
+
+    def __netbox_update_interface_for_proxmox_node_by_vm_id(self, object_type: str, vm_id: int, interface_name: str, interface_data: dict):
+        try:
+            interface = self.nb.virtualization.interfaces.get(virtual_machine_id=vm_id, name=interface_name)
+
+            if interface:
+                if self.debug:
+                    print(F"VM IF INFO: {dict(interface)}")
+                    print()
+
+                interface_mac = self.__netbox_assign_mac_address_for_vm_interface_by_object_id(interface.id, object_type, interface_data['mac'])
+
+                interface.enabled = interface_data['enabled']
+
+                if 'id' in interface:
+                    interface.primary_mac_address = interface_mac['id']
+                else:
+                    interface.primary_mac_address = interface_mac.id            
+
+                interface.save()
+        except pynetbox.RequestError as e:
+            raise ValueError(e, e.error)
         
 
 class NetBoxIPAddresses(NetBox):

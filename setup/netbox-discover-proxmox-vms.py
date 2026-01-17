@@ -44,27 +44,36 @@ def get_arguments():
 
 
 def netbox_get_vms(nb_obj = None):
-    global DEBUG
-
     nb_vm_info = {}
+
+    if DEBUG:
+        print("in netbox_get_vms")
+        print()
 
     try:
         for each_nb_vm in list(nb_obj.nb.virtualization.virtual_machines.all()):
-
             if DEBUG:
                 print("NETBOX EACH VM", each_nb_vm)
                 print()
 
             each_nb_vm_info = dict(each_nb_vm)
 
+            if DEBUG:
+                print(f"-  EACH NETBOX VM INFO: {each_nb_vm_info}")
+                print()
+
             if not each_nb_vm_info['name'] in nb_vm_info:
                 nb_vm_info[each_nb_vm_info['name']] = {}
 
             nb_vm_info[each_nb_vm_info['name']]['is_proxmox_vm'] = False
 
-            if each_nb_vm_info['custom_fields']['proxmox_vmid']:
+            if 'proxmox_vmid' in each_nb_vm_info['custom_fields']:
                 nb_vm_info[each_nb_vm_info['name']]['is_proxmox_vm'] = True
-                nb_vm_info[each_nb_vm_info['name']]['id'] = int(each_nb_vm_info['custom_fields']['proxmox_vmid'])
+
+                if each_nb_vm_info['custom_fields']['proxmox_vmid']:
+                    nb_vm_info[each_nb_vm_info['name']]['id'] = int(each_nb_vm_info['custom_fields']['proxmox_vmid'])
+                else:
+                    nb_vm_info[each_nb_vm_info['name']]['id'] = -1
     except pynetbox.RequestError as e:
         raise ValueError(e, e.error)
 
@@ -146,18 +155,8 @@ def __netbox_create_vm_network_interface(nb_url = None, nb_api_token = None, nb_
             'mac_address': vm_network_interface_mac_address
         }
 
-        nb_create_vm_interface = NetBoxVirtualMachineInterface(nb_url, nb_api_token, nb_options, nb_vm_create_interface_payload)
-        nb_create_vm_interface.debug = True
+        nb_create_vm_interface = NetBoxVirtualMachineInterface(nb_url, nb_api_token, nb_options, 'virtualization.vminterface', nb_vm_create_interface_payload)
         nb_create_vm_interface_id = dict(nb_create_vm_interface.obj)['id']
-
-        """
-        nb_create_vm_interface = nb_obj.nb.virtualization.interfaces.get(virtual_machine_id = netbox_vm_id, name = vm_network_interface_name, mac_address = vm_network_interface_mac_address)
-
-        if not nb_create_vm_interface:
-            nb_create_vm_interface = nb_obj.nb.virtualization.interfaces.create(nb_vm_create_interface_payload)
-        
-        nb_create_vm_interface_id = dict(nb_create_vm_interface)['id']
-        """
 
         return nb_create_vm_interface_id
     except pynetbox.RequestError as e:
@@ -165,8 +164,6 @@ def __netbox_create_vm_network_interface(nb_url = None, nb_api_token = None, nb_
 
 
 def __netbox_vm_network_interface_assign_ip_address(nb_url = None, nb_api_token = None, nb_options = {}, netbox_vm_network_interface_id = 0, ip_address = None):
-    global DEBUG
-
     try:
         if DEBUG:
             print(f"Going to assign IP address {ip_address} to {netbox_vm_network_interface_id}")
@@ -231,11 +228,17 @@ def __netbox_vm_create_disk(vm_name = None, disk_name = None, disk_size = 0, pro
 
 def main():
     global nb_obj
+    global DEBUG
 
     args = get_arguments()
+
     app_config_file = args.config
 
     DEBUG = args.debug
+
+    if DEBUG:
+        print("ARGS", args)
+        print()
 
     with open(app_config_file) as yaml_cfg:
         try:
@@ -268,8 +271,9 @@ def main():
 
         nb_options['branch_timeout'] = branch_timeout
 
+    nb_options['debug'] = DEBUG
+
     nb_obj = NetBox(nb_url, app_config['netbox_api_config']['api_token'], nb_options, None)
-    nb_obj.debug = DEBUG
 
     # Collect all NetBox VMs, and for Proxmox VMs: VMIDs
     all_nb_vms = netbox_get_vms(nb_obj)
@@ -278,12 +282,13 @@ def main():
 
     for all_nb_vm in all_nb_vms:
         if DEBUG:
-            print(f"Collected VM: {all_nb_vm}")
+            print(f"Collected VM: {all_nb_vm} ||| {type(all_nb_vm)}")
             print()
 
         all_nb_vms_ids[all_nb_vms[all_nb_vm]['id']] = all_nb_vm
 
     pm = NetBoxProxmoxAPIHelper(app_config)
+    pm.debug = DEBUG
 
     if args.virt_type == 'vm':
         device_role_id = dict(NetBoxDeviceRoles(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': app_config['netbox']['vm_role'], 'slug': __netbox_make_slug(app_config['netbox']['vm_role']), 'vm_role': True, 'color': 'ffbf00'}).obj)['id']
@@ -299,6 +304,10 @@ def main():
                 nbt_vm_discovered_id = dict(NetBoxTags(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': 'proxmox-vm-discovered', 'slug': __netbox_make_slug('proxmox-vm-discovered'), 'color': 'aa1409'}).obj)['id']
             else:
                 nbt_vm_discovered_id = 0
+
+            if DEBUG:
+                print(f"\t\t\tVM CONFIGURATION: {proxmox_vm_configurations[proxmox_vm_configuration]}")
+                print()
 
             netbox_create_vm(nb_url, app_config['netbox_api_config']['api_token'], nb_options, pm.proxmox_cluster_name, proxmox_vm_configurations[proxmox_vm_configuration], proxmox_vm_configuration, device_role_id, nbt_vm_discovered_id)
     elif args.virt_type == 'lxc':
