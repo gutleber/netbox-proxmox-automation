@@ -8,7 +8,7 @@ You will need to perform some customization in NetBox before you can start autom
 
 #### Automated NetBox Objects and the Creation of Custom Field Choices and Custom Fields
 
-`netbox-proxmox-automation` version 1.1.0 and newer ships with a convenience script, `netbox_setup_objects_and_custom_fields.py`, that when used alongside a configuration file of your choice, will greatly simplify this process.  In the case of AWX/Tower/AAP, `netbox_setup_objects_and_custom_fields.py` will query your AWX/Tower/AAP instance for project and template(s) information; this information will then be used to create the corresponding webhooks and event rules in NetBox.
+`netbox-proxmox-automation` ships with a convenience script, `netbox_setup_objects_and_custom_fields.py`, that when used alongside a configuration file of your choice, will greatly simplify this process.  In the case of AWX/Tower/AAP, `netbox_setup_objects_and_custom_fields.py` will query your AWX/Tower/AAP instance for project and template(s) information; this information will then be used to create the corresponding webhooks and event rules in NetBox.
 
 There exists a sample configuration file called `netbox_setup_objects.yml-sample` under the conf.d directory of this git repository.  Copy this file to a location of your choice, and season it to taste.  In the end you should have a configuration that looks something like this.
 
@@ -48,6 +48,12 @@ shell$ source venv/bin/activate
 (venv) shell$ pip install -r requirements.txt
 
 (venv) shell$ ./netbox_setup_objects_and_custom_fields.py --config /path/to/your/configuration.yml
+```
+
+If you want to run this script with debug (verbose) output, the pattern is like so:
+
+```
+(venv) shell$ ./netbox_setup_objects_and_custom_fields.py --config /path/to/your/configuration.yml --debug
 ```
 
 Then verify that everything has been created.  In the end, you should have Custom Fields for the following.
