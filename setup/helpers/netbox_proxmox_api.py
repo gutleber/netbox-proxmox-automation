@@ -113,7 +113,7 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
             if not proxmox_vm in proxmox_vm_configurations:
                 proxmox_vm_configurations[proxmox_vm] = {}
 
-            proxmox_vm_configurations[proxmox_vm]['vcpus'] = proxmox_vm_config['cores']
+            proxmox_vm_configurations[proxmox_vm]['vcpus'] = proxmox_vm_config.get('cores', 1)
             proxmox_vm_configurations[proxmox_vm]['memory'] = proxmox_vm_config['memory']
             proxmox_vm_configurations[proxmox_vm]['running'] = self.proxmox_vms[proxmox_vm]['running']
             proxmox_vm_configurations[proxmox_vm]['node'] = self.proxmox_vms[proxmox_vm]['node']
@@ -123,6 +123,7 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
                 if 'sshkeys' in proxmox_vm_config:
                     proxmox_vm_configurations[proxmox_vm]['public_ssh_key'] = urllib.parse.unquote(proxmox_vm_config['sshkeys'])
 
+                proxmox_vm_disks = []
                 if 'bootdisk' in proxmox_vm_config:
                     proxmox_vm_configurations[proxmox_vm]['bootdisk'] = proxmox_vm_config['bootdisk']
 
@@ -180,7 +181,7 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
                                 proxmox_vm_configurations[proxmox_vm]['network_interfaces'][network_interface_name] = {}
 
                             proxmox_vm_configurations[proxmox_vm]['network_interfaces'][network_interface_name] = {}
-                            proxmox_vm_configurations[proxmox_vm]['network_interfaces'][network_interface_name]['mac-address'] = ni_info['hardware-address']
+                            proxmox_vm_configurations[proxmox_vm]['network_interfaces'][network_interface_name]['mac-address'] = ni_info.get('hardware-address', '')
                             proxmox_vm_configurations[proxmox_vm]['network_interfaces'][network_interface_name]['ip-addresses'] = []
 
                             for ip_address in ni_info['ip-addresses']:
@@ -279,7 +280,8 @@ class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
                 ni_info6 = re.search(r'^name=([^,]+),bridge=[^,]+,firewall=\d{1},gw6=([^,]+),hwaddr=([^,]+),ip6=([^,]+),', proxmox_lxc_config[net_interface_name])
 
                 if not ni_info and not ni_info6:
-                    raise ValueError(f"Unable to parse network interface information for {proxmox_lxc}")
+                    print(f"WARNING: Skipping {proxmox_lxc} - unable to parse network interface (may be DHCP)")
+                    break
                 
                 if ni_info:
                     if len(ni_info.groups()) != 4:

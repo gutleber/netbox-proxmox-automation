@@ -26,7 +26,7 @@ class NetBox:
 
     def _sanitize_payload(self):
         # Return a sanitized version of the payload
-        return {key: self._sanitize_value(key, value) for key, value in self.payload.items()}
+        return {key: self._sanitize_value(key, value) for key, value in self.payload.items()} if self.payload else {}
     
 
     def __init__(self, url, token, options, payload) -> None:
@@ -146,6 +146,9 @@ class NetBox:
                 elif 'model' in self.payload:
                     print(f"Object (has required) created successfully with sanitized payload: '{self._sanitize_payload()}'.")
                     self.findBy('model')
+                elif 'address' in self.payload:
+                    print(f"Object (has required) created successfully with sanitized payload: '{self._sanitize_payload()}'.")
+                    self.findBy('address')
 
 
 class NetBoxSites(NetBox):
@@ -305,10 +308,11 @@ class NetBoxObjectInterfaceMacAddressMapping(NetBox):
 
                 interface.enabled = interface_data['enabled']
 
-                if 'id' in interface:
-                    interface.primary_mac_address = interface_mac['id']
-                else:
-                    interface.primary_mac_address = interface_mac.id            
+                if interface_mac:
+                    if 'id' in interface_mac:
+                        interface.primary_mac_address = interface_mac['id']
+                    else:
+                        interface.primary_mac_address = interface_mac.id
 
                 interface.save()
         except pynetbox.RequestError as e:
@@ -496,19 +500,21 @@ class NetBoxVirtualMachineInterface(NetBox):
                     print(F"VM IF INFO: {dict(interface)}")
                     print()
 
-                interface_mac = self.__netbox_assign_mac_address_for_vm_interface_by_object_id(interface.id, object_type, interface_data['mac'])
+                interface_mac = None
+                if interface_data['mac']:
+                    interface_mac = self.__netbox_assign_mac_address_for_vm_interface_by_object_id(interface.id, object_type, interface_data['mac'])
 
                 interface.enabled = interface_data['enabled']
 
-                if 'id' in interface:
-                    interface.primary_mac_address = interface_mac['id']
-                else:
-                    interface.primary_mac_address = interface_mac.id            
+                if interface_mac:
+                    if 'id' in interface_mac:
+                        interface.primary_mac_address = interface_mac['id']
+                    else:
+                        interface.primary_mac_address = interface_mac.id
 
                 interface.save()
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
-        
 
 class NetBoxIPAddresses(NetBox):
     def __init__(self, url, token, options, payload, find_key = 'name') -> None:
