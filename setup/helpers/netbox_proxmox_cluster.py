@@ -13,8 +13,8 @@ from proxmoxer import ProxmoxAPI, ResourceException
 from . proxmox_api_common import ProxmoxAPICommon
 
 class NetBoxProxmoxCluster(ProxmoxAPICommon):
-    def __init__(self, cfg_data: dict):
-        super(NetBoxProxmoxCluster, self).__init__(cfg_data)
+    def __init__(self, cfg_data: dict, options: dict):
+        super(NetBoxProxmoxCluster, self).__init__(cfg_data, options)
 
         self.cfg_data = cfg_data
         self.discovered_proxmox_nodes_information = {}
@@ -30,7 +30,7 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
 
         # test nodes data
         # PMCI 1 {'pxmx-n2': {'ip': '192.168.71.4', 'login': 'root', 'use_pass': False}, 'pxmx-n1': {'ip': '192.168.71.3', 'login': 'root', 'use_pass': False}}
-        for proxmox_node in self.proxmox_nodes:
+        for proxmox_node in sorted(self.proxmox_nodes):
             if not proxmox_node in temp_nodes_cn_info:
                 temp_nodes_cn_info[proxmox_node] = {}
 
@@ -156,6 +156,30 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
         return output, error
 
 
+    def simulate_get_proxmox_nodes_system_information(self):
+        pm_nodes_sim_dir = './.simulate/proxmox_nodes'
+
+        if not os.path.isdir(pm_nodes_sim_dir):
+            raise ValueError(f"Unable to locate simulation directory for Proxmox nodes: {pm_nodes_sim_dir}")
+        
+        for item in os.listdir(pm_nodes_sim_dir):
+            pm_nodes_subdir = f"{pm_nodes_sim_dir}/{item}"
+
+            if os.path.isdir(pm_nodes_subdir):
+                if not item in self.proxmox_nodes:
+                    self.proxmox_nodes[item] = {}
+
+            if not 'system' in self.proxmox_nodes[item]:
+                self.proxmox_nodes[item]['system'] = {}
+
+            json_system_file = f"{pm_nodes_subdir}/system.json"
+
+            with open(json_system_file, 'r') as json_f:
+                json_data = json.load(json_f)
+
+            self.proxmox_nodes[item]['system'] = json_data
+
+
     def get_proxmox_nodes_system_information(self):
         dmidecode_command = f"{self.cfg_data['proxmox']['node_commands']['dmidecode_command']} -t system"
 
@@ -208,13 +232,6 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
 
 
     def get_proxmox_nodes_network_interfaces(self):
-        lshw_command = f"{self.cfg_data['proxmox']['node_commands']['lshw_command']} -class network -json"
-
-        network_interface_enabled_states = {
-            'yes': True,
-            'no': False
-        }
-
         ethtool_to_netbox_speed_mappings = {
             'supported_ports': {
                 '[ TP ]': 'twisted pair'
@@ -225,46 +242,64 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
             }
         }
 
-        for proxmox_node in self.proxmox_nodes_connection_info:
-            if not 'network_interfaces' in self.discovered_proxmox_nodes_information[proxmox_node]['system']:
-                self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'] = {}
+        try:            
+            for proxmox_node in self.proxmox_nodes_connection_info:
+                if not 'network_interfaces' in self.discovered_proxmox_nodes_information[proxmox_node]['system']:
+                    self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'] = {}
 
-            output, error = self.__get_proxmox_node_info_cmd(self.proxmox_nodes_connection_info[proxmox_node], lshw_command)
+                print(f"PM NODE NI: {proxmox_node} ||| {self.proxmox_nodes_connection_info[proxmox_node]}")
+                node_network_info = self.proxmox_api.nodes(proxmox_node).network.get()
 
-            if error:
-                raise ValueError(error)
-            
-            try:
+                if not node_network_info:
+                    raise ValueError(f"Unable to finding network information for {proxmox_node}")
+
                 interface_number = 0
 
-                json_ni = json.loads(output)
+                for ni in sorted(node_network_info, key=lambda item: item['iface']):
+                    if not ni['iface'] in self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces']:
+                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']] = {}
 
-                if self.debug:
-                    print(f"JSON NETWORK INTERFACES DATA FROM {lshw_command}")
-                    print(json.dumps(json_ni, indent=4))
-                    print()
+                    if not 'active' in ni:
+                        ni['active'] = 0
 
-                for interface in json_ni:
-                    if 'id' in interface and interface['id'] == 'network':
-                        if not 'logicalname' in interface:
-                            continue
+                    self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']]['enabled'] = bool(ni['active'])
 
-                        if not interface['logicalname'] in self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces']:
-                            self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interface['logicalname']] = {}
+                    interface_mac_addr_cmd = f"/usr/bin/cat /sys/class/net/{ni['iface']}/address"
+                    output, error = self.__get_proxmox_node_info_cmd(self.proxmox_nodes_connection_info[proxmox_node], interface_mac_addr_cmd)
 
+                    if error:
+                        raise ValueError(f"Unable to retrieve mac address for {ni['iface']} on {proxmox_node}: {error}")
+                    
+                    if self.debug:
+                        print(f"Retrieved mac address for {ni['iface']} on {proxmox_node}: {output}")
+                        print()
+                    
+                    self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']]['mac'] = output.rstrip()
+
+                    if self.discovered_proxmox_nodes_information[proxmox_node]['system']['manufacturer'].lower() == 'protectli':
                         if interface_number == 0:
-                            if self.discovered_proxmox_nodes_information[proxmox_node]['system']['manufacturer'].lower() == 'protectli':
-                                if self.discovered_proxmox_nodes_information[proxmox_node]['system']['serial_number'].lower().startswith('defau'):
-                                    self.discovered_proxmox_nodes_information[proxmox_node]['system']['serial_number'] = interface['serial'].lower().replace(':', '-')
-                                    self.discovered_proxmox_nodes_information[proxmox_node]['system']['serial'] = self.discovered_proxmox_nodes_information[proxmox_node]['system'].pop('serial_number')
-                            
-                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interface['logicalname']]['mac'] = interface['serial']
-                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interface['logicalname']]['enabled'] = network_interface_enabled_states[interface['configuration']['link']]
+                            self.discovered_proxmox_nodes_information[proxmox_node]['system']['serial_number'] = output.rstrip().lower().replace(':', '-')
 
-                        ethtool_info = self.__get_proxmox_node_ethtool_info(self.proxmox_nodes_connection_info[proxmox_node], interface['logicalname'])
+                    if 'bridge_ports' in ni:
+                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']]['bridge_ports'] = ni['bridge_ports'].split(' ')[0]
 
-                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interface['logicalname']]['duplex'] = ethtool_info['duplex']
-                        
+                    if 'cidr' in ni:
+                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']]['ipv4address'] = ni['cidr']
+
+                    if 'cidr6' in ni:
+                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']]['ipv6address'] = ni['cidr6']
+
+                    if self.debug:
+                        print("  NODE NETWORK INTERFACE", json.dumps(ni, indent=4), "\n", ni['iface'], ni['type'], ni['active'])
+
+                    if bool(ni['active']) and not ni['iface'].startswith('vmbr'):
+                        ethtool_info = self.__get_proxmox_node_ethtool_info(self.proxmox_nodes_connection_info[proxmox_node], ni['iface'])
+
+                        if self.debug:
+                            print(f"ethtool output")
+                            print(ethtool_info)
+                            print()
+
                         # need last supported_link_modes for type mapping
                         if ethtool_info['port'] in ethtool_to_netbox_speed_mappings['supported_ports']:
                             if_type = ethtool_to_netbox_speed_mappings['supported_ports'][ethtool_info['port']]
@@ -272,68 +307,100 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
 
                             if max_interface_link_mode in ethtool_to_netbox_speed_mappings[if_type]:
                                 if self.debug:
-                                    print(f"Found max interface link mode")
+                                    print(f"Found max interface link mode {max_interface_link_mode}")
                                     print()
 
                                 if_type_speed = ethtool_to_netbox_speed_mappings[if_type][max_interface_link_mode]
-                                self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interface['logicalname']]['type'] = if_type_speed
+                                self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']]['type'] = if_type_speed
                             else:
                                 if self.debug:
-                                    print("*** No interface link mode found.  Using default (other)")
-                                    print
+                                    print(f"*** No interface link mode found for {ni['iface']}.  Using default (other)")
+                                    print()
 
-                                self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interface['logicalname']]['type'] = 'other'
+                                self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']]['type'] = 'other'
+                    else:
+                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']]['type'] = 'other'
+
+                        if ni['iface'].startswith('vmbr'):
+                            self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][ni['iface']]['type'] = 'bridge'
 
                     interface_number += 1
-            except json.JSONDecodeError as e:
-                raise ValueError(f"JSON conversion error: {e}")            
+                
+                if self.debug:
+                    print("ALL IF", self.discovered_proxmox_nodes_information)
+        except proxmoxer.core.ResourceException as e:
+            raise ValueError(f"Proxmox resource exception encountered: {e}")
+    
 
-            try:
-                interfaces_ip_addresses = self.__get_proxmox_node_ip_addresses(self.proxmox_nodes_connection_info[proxmox_node])
-                for interfaces_ip_address in interfaces_ip_addresses:
-                    if interfaces_ip_address in self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'] or interfaces_ip_address.startswith('vmbr'):
-                        if interfaces_ip_address.startswith('vmbr'):
-                            if not interfaces_ip_address in self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces']:
-                                self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interfaces_ip_address] = {}
+    def simulate_get_proxmox_nodes_network_interfaces(self):
+        base_mac_addr = ':d3:ad:b3:3f:' # e.g. 64:62:66:23:BF:13
+        mac_addr_first_val = 0
 
-                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interfaces_ip_address]['ipv4address'] = interfaces_ip_addresses[interfaces_ip_address]['ipv4address']
-                        self.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][interfaces_ip_address]['ipv6address'] = interfaces_ip_addresses[interfaces_ip_address]['ipv6address']
-            except json.JSONDecodeError as e:
-                raise ValueError(f"JSON conversion error: {e}")            
+        pm_nodes_sim_dir = './.simulate/proxmox_nodes'
 
+        for proxmox_node in self.proxmox_nodes:
+            interface_number = 0
+            mac_addr_last_val = 0
 
-    def __get_proxmox_node_ip_addresses(self, proxmox_node_info: dict):
-        proxmox_node_ip_addresses = {}
-        ip_command = f"{self.cfg_data['proxmox']['node_commands']['ipaddr_command']}"
+            if not 'network_interfaces' in self.proxmox_nodes[proxmox_node]['system']:
+                self.proxmox_nodes[proxmox_node]['system']['network_interfaces'] = {}
 
-        output, error = self.__get_proxmox_node_info_cmd(proxmox_node_info, ip_command)
+            pm_nodes_subdir = f"{pm_nodes_sim_dir}/{proxmox_node}"
 
-        if error:
-            raise ValueError(error)
+            if not os.path.isdir(pm_nodes_subdir):
+                raise ValueError(f"Unable to locate simulation directory for Proxmox nodes: {pm_nodes_subdir}")
+        
+            json_network_file = f"{pm_nodes_subdir}/networking.json"
 
-        output_lines = output.split('\n')
+            with open(json_network_file, 'r') as json_f:
+                json_network_data = json.load(json_f)
 
-        for output_line in output_lines:
-            if output_line == "":
-                continue
+            for ni in sorted(json_network_data, key=lambda item: item['iface']):
+                if not 'iface' in ni:
+                    continue
 
-            if_parts = ' '.join(output_line.split()).split(' ')
+                if ni['type'] == 'unknown':
+                    continue
 
-            if len(if_parts) == 4 or len(if_parts) == 5:
-                if if_parts[0] != 'lo':
-                    proxmox_node_ip_addresses[if_parts[0]] = {
-                        'ipv4address': if_parts[2],
-                        'ipv6address': if_parts[-1],
-                    }
-        try:
-            if self.debug:
-                print(f"Collected node IP address information")
-                print(json.dumps(proxmox_node_ip_addresses, indent=4))
-                print()
+                if not ni['iface'] in self.proxmox_nodes[proxmox_node]['system']['network_interfaces']:
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']] = {}
 
-            return json.loads(json.dumps(proxmox_node_ip_addresses))
-        except json.JSONDecodeError as e:
-            raise ValueError(f"JSON conversion error: {e}")    
+                if not 'active' in ni:
+                    ni['active'] = 0
+
+                mac_first_two = f"{mac_addr_first_val:02d}"
+                mac_last_two = f"{mac_addr_last_val:02d}"
+                mac_addr = f"{str(mac_first_two)}{base_mac_addr}{str(mac_last_two)}"
+                print(f"proxmox node {proxmox_node} -> {ni['iface']} -> mac {mac_addr} active {ni['active']}")
+
+                self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['mac'] = mac_addr
+                self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['enabled'] = bool(ni['active'])
+
+                if 'bridge_ports' in ni:
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['bridge_ports'] = ni['bridge_ports'].split(' ')[0]
+
+                if 'cidr' in ni:
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['ipv4address'] = ni['cidr']
+
+                if 'cidr6' in ni:
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['ipv6address'] = ni['cidr6']
+
+                if self.debug:
+                    print("  NODE NETWORK INTERFACE", json.dumps(ni, indent=4), "\n", ni['iface'], ni['type'], ni['active'])
+
+                if ni['type'] == 'eth':
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['type'] = 'other'
+                elif ni['type'] == 'bridge':
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['type'] = 'bridge'
+
+                interface_number += 1
+                
+                if self.debug:
+                    print("ALL IF", self.proxmox_nodes)
+
+                mac_addr_last_val += 1
+
+            mac_addr_first_val += 1
 
 
     def __get_proxmox_node_ethtool_info(self, proxmox_node_info: dict, network_interface: str):

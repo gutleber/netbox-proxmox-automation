@@ -208,7 +208,7 @@ class NetBoxDeviceTypes(NetBox):
 
 
 class NetBoxDeviceTypesInterfaceTemplates(NetBox):
-    def __init__(self, url, token, options, payload, find_key = 'name') -> None:
+    def __init__(self, url, token, options, payload) -> None:
         # Initialize the Netbox superclass with URL and token
         super().__init__(url, token, options, payload)
         self.object_type = self.nb.dcim.interface_templates
@@ -217,8 +217,9 @@ class NetBoxDeviceTypesInterfaceTemplates(NetBox):
             "name",
             "type" 
         ]
-        self.find_key = find_key
-        self.findBy(self.find_key)
+            
+        self.find_key_mult = {'device_type': payload['device_type'], 'name': payload['name'], 'type': payload['type']}
+        self.findByMulti(self.find_key_mult)
         self.createOrUpdate()
 
 
@@ -263,6 +264,39 @@ class NetBoxDevicesInterfaces(NetBox):
         ]
         self.find_key = find_key
         self.findByFilter(self.find_key)
+
+
+class NetBoxDeviceInterface(NetBox):
+    def __init__(self, url, token, options, payload) -> None:
+        # Initialize the Netbox superclass with URL and token
+        super().__init__(url, token, options, payload)
+        self.object_type = self.nb.dcim.interfaces
+        self.required_fields = [ 
+            "device",
+            "name"
+        ]
+        self.find_key_mult = {'device_id': self.payload['device'], 'name': self.payload['name']}
+        self.findByMulti(self.find_key_mult)
+
+        if self.debug:
+            print(f"\tFOUND OBJ NetBoxDeviceInterface: {self.obj}")
+
+        self.createOrUpdate()
+
+
+class NetBoxDeviceBridgeInterface(NetBox):
+    def __init__(self, url, token, options, payload) -> None:
+        # Initialize the Netbox superclass with URL and token
+        super().__init__(url, token, options, payload)
+        self.object_type = self.nb.dcim.interfaces
+        self.required_fields = [ 
+            "device",
+            "bridge",
+            "name"
+        ]
+        self.find_key_mult = {'device_id': self.payload['device'], 'bridge': self.payload['bridge'], 'name': self.payload['name']}
+        self.findByMulti(self.find_key_mult)
+        self.createOrUpdate()
 
 
 class NetBoxObjectInterfaceMacAddressMapping(NetBox):
@@ -313,21 +347,6 @@ class NetBoxObjectInterfaceMacAddressMapping(NetBox):
                 interface.save()
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
-
-
-class NetBoxDeviceCreateBridgeInterface(NetBox):
-    def __init__(self, url, token, options, payload) -> None:
-        # Initialize the Netbox superclass with URL and token
-        super().__init__(url, token, options, payload)
-        self.object_type = self.nb.dcim.interfaces
-        self.required_fields = [ 
-            "device",
-            "bridge",
-            "name"
-        ]
-        self.find_key_mult = {'device_id': self.payload['device'], 'bridge': self.payload['bridge'], 'name': self.payload['name']}
-        self.findByMulti(self.find_key_mult)
-        self.createOrUpdate()
 
 
 class NetBoxTags(NetBox):
