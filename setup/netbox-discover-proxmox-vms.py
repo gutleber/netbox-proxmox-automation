@@ -168,6 +168,16 @@ def __netbox_vm_network_interface_assign_ip_address(nb_url = None, nb_api_token 
         if DEBUG:
             print(f"Going to assign IP address {ip_address} to {netbox_vm_network_interface_id}")
 
+        # Strip IPv6 zone ID (e.g., %5) if present
+        # Skip invalid IP addresses (no prefix or /0 mask)
+        if not '/' in ip_address or ip_address.endswith('/0'):
+            if DEBUG:
+                print(f"Skipping invalid IP address: {ip_address}")
+            return None
+
+        if '%' in ip_address:
+            ip_address = re.sub(r'%[^/]+', '', ip_address)
+
         nb_assign_ip_address_payload = {
             'address': ip_address,
             'status': 'active',
@@ -285,7 +295,8 @@ def main():
             print(f"Collected VM: {all_nb_vm} ||| {type(all_nb_vm)}")
             print()
 
-        all_nb_vms_ids[all_nb_vms[all_nb_vm]['id']] = all_nb_vm
+        if 'id' in all_nb_vms[all_nb_vm]:
+            all_nb_vms_ids[all_nb_vms[all_nb_vm]['id']] = all_nb_vm
 
     pm = NetBoxProxmoxAPIHelper(app_config)
     pm.debug = DEBUG
