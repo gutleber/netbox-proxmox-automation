@@ -273,7 +273,7 @@ def main():
 
     nb_options['debug'] = DEBUG
 
-    nb_obj = NetBox(nb_url, app_config['netbox_api_config']['api_token'], nb_options, None)
+    nb_obj = NetBox(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {})
 
     # Collect all NetBox VMs, and for Proxmox VMs: VMIDs
     all_nb_vms = netbox_get_vms(nb_obj)
