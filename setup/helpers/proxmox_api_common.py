@@ -1,4 +1,5 @@
-import re
+import os, re
+import json
 import pynetbox
 import proxmoxer
 import requests
@@ -8,12 +9,13 @@ import urllib.parse
 from proxmoxer import ProxmoxAPI, ResourceException
 
 class ProxmoxAPICommon:
-    def __init__(self, cfg_data):
+    def __init__(self, cfg_data, options):
         self.cfg_data = cfg_data
         self.proxmox_cluster_name = None
         self.proxmox_nodes = {}
 
-        self.debug = False
+        self.debug = options['debug']
+        self.simulate = options['simulate']
         
         self.proxmox_api_config = {
             'api_host': cfg_data['proxmox_api_config']['api_host'],
@@ -33,9 +35,40 @@ class ProxmoxAPICommon:
             verify_ssl=self.proxmox_api_config['verify_ssl']
         )
 
-        self.__proxmox_collect_cluster_name_and_nodes()
+        if not self.simulate:
+            self.__proxmox_collect_cluster_name_and_nodes()
+        else:
+            self.__simulate_proxmox_collect_cluster_name_and_nodes()
 
     
+    def __simulate_proxmox_collect_cluster_name_and_nodes(self):
+        proxmox_version = 'Proxmox-8.4.14-b502d23c55afcba1'
+        proxmox_online = 1
+        base_ip = '192.168.100.'
+
+        pm_nodes_sim_dir = './.simulate/proxmox_nodes'
+
+        self.proxmox_cluster_name = 'proxmox-simulated-cluster-name'
+
+        if not os.path.isdir(pm_nodes_sim_dir):
+            raise ValueError(f"Unable to locate simulation directory for Proxmox nodes: {pm_nodes_sim_dir}")
+
+        last_q = 1
+
+        for item in sorted(os.listdir(pm_nodes_sim_dir)):
+            pm_nodes_subdir = f"{pm_nodes_sim_dir}/{item}"
+
+            if os.path.isdir(pm_nodes_subdir):
+                if not item in self.proxmox_nodes:
+                    self.proxmox_nodes[item] = {}
+
+                self.proxmox_nodes[item]['ip'] = f"{base_ip}{str(last_q)}"
+                self.proxmox_nodes[item]['online'] = proxmox_online
+                self.proxmox_nodes[item]['version'] = proxmox_version
+
+                last_q += 1
+
+
     def __proxmox_collect_cluster_name_and_nodes(self):
         try:
             proxmox_cluster_status = self.proxmox_api.cluster.status.get()

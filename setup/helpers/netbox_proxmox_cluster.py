@@ -13,8 +13,8 @@ from proxmoxer import ProxmoxAPI, ResourceException
 from . proxmox_api_common import ProxmoxAPICommon
 
 class NetBoxProxmoxCluster(ProxmoxAPICommon):
-    def __init__(self, cfg_data: dict):
-        super(NetBoxProxmoxCluster, self).__init__(cfg_data)
+    def __init__(self, cfg_data: dict, options: dict):
+        super(NetBoxProxmoxCluster, self).__init__(cfg_data, options)
 
         self.cfg_data = cfg_data
         self.discovered_proxmox_nodes_information = {}
@@ -154,6 +154,30 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
             client.close()
 
         return output, error
+
+
+    def simulate_get_proxmox_nodes_system_information(self):
+        pm_nodes_sim_dir = './.simulate/proxmox_nodes'
+
+        if not os.path.isdir(pm_nodes_sim_dir):
+            raise ValueError(f"Unable to locate simulation directory for Proxmox nodes: {pm_nodes_sim_dir}")
+        
+        for item in os.listdir(pm_nodes_sim_dir):
+            pm_nodes_subdir = f"{pm_nodes_sim_dir}/{item}"
+
+            if os.path.isdir(pm_nodes_subdir):
+                if not item in self.proxmox_nodes:
+                    self.proxmox_nodes[item] = {}
+
+            if not 'system' in self.proxmox_nodes[item]:
+                self.proxmox_nodes[item]['system'] = {}
+
+            json_system_file = f"{pm_nodes_subdir}/system.json"
+
+            with open(json_system_file, 'r') as json_f:
+                json_data = json.load(json_f)
+
+            self.proxmox_nodes[item]['system'] = json_data
 
 
     def get_proxmox_nodes_system_information(self):
@@ -307,6 +331,77 @@ class NetBoxProxmoxCluster(ProxmoxAPICommon):
         except proxmoxer.core.ResourceException as e:
             raise ValueError(f"Proxmox resource exception encountered: {e}")
     
+
+    def simulate_get_proxmox_nodes_network_interfaces(self):
+        base_mac_addr = ':d3:ad:b3:3f:' # e.g. 64:62:66:23:BF:13
+        mac_addr_first_val = 0
+
+        pm_nodes_sim_dir = './.simulate/proxmox_nodes'
+
+        for proxmox_node in self.proxmox_nodes:
+            interface_number = 0
+            mac_addr_last_val = 0
+
+            if not 'network_interfaces' in self.proxmox_nodes[proxmox_node]['system']:
+                self.proxmox_nodes[proxmox_node]['system']['network_interfaces'] = {}
+
+            pm_nodes_subdir = f"{pm_nodes_sim_dir}/{proxmox_node}"
+
+            if not os.path.isdir(pm_nodes_subdir):
+                raise ValueError(f"Unable to locate simulation directory for Proxmox nodes: {pm_nodes_subdir}")
+        
+            json_network_file = f"{pm_nodes_subdir}/networking.json"
+
+            with open(json_network_file, 'r') as json_f:
+                json_network_data = json.load(json_f)
+
+            for ni in sorted(json_network_data, key=lambda item: item['iface']):
+                if not 'iface' in ni:
+                    continue
+
+                if ni['type'] == 'unknown':
+                    continue
+
+                if not ni['iface'] in self.proxmox_nodes[proxmox_node]['system']['network_interfaces']:
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']] = {}
+
+                if not 'active' in ni:
+                    ni['active'] = 0
+
+                mac_first_two = f"{mac_addr_first_val:02d}"
+                mac_last_two = f"{mac_addr_last_val:02d}"
+                mac_addr = f"{str(mac_first_two)}{base_mac_addr}{str(mac_last_two)}"
+                print(f"proxmox node {proxmox_node} -> {ni['iface']} -> mac {mac_addr} active {ni['active']}")
+
+                self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['mac'] = mac_addr
+                self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['enabled'] = bool(ni['active'])
+
+                if 'bridge_ports' in ni:
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['bridge_ports'] = ni['bridge_ports'].split(' ')[0]
+
+                if 'cidr' in ni:
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['ipv4address'] = ni['cidr']
+
+                if 'cidr6' in ni:
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['ipv6address'] = ni['cidr6']
+
+                if self.debug:
+                    print("  NODE NETWORK INTERFACE", json.dumps(ni, indent=4), "\n", ni['iface'], ni['type'], ni['active'])
+
+                if ni['type'] == 'eth':
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['type'] = 'other'
+                elif ni['type'] == 'bridge':
+                    self.proxmox_nodes[proxmox_node]['system']['network_interfaces'][ni['iface']]['type'] = 'bridge'
+
+                interface_number += 1
+                
+                if self.debug:
+                    print("ALL IF", self.proxmox_nodes)
+
+                mac_addr_last_val += 1
+
+            mac_addr_first_val += 1
+
 
     def __get_proxmox_node_ethtool_info(self, proxmox_node_info: dict, network_interface: str):
         ethtool_settings = {}

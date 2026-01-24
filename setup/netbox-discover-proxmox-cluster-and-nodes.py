@@ -26,6 +26,7 @@ def get_arguments():
 
     parser.add_argument("--config", required=True, help="YAML file containing the configuration")
     parser.add_argument("--debug", action='store_true', default=False, help="Enable debug (verbose) output")
+    parser.add_argument("--simulate", action='store_true', default=False, help="Simulate device collection.  DO NOT USE.  INTERNAL ONLY!")
 
     # Parse the arguments
     args = parser.parse_args()
@@ -74,6 +75,7 @@ def main():
     args = get_arguments()
 
     DEBUG = args.debug
+    SIMULATE = args.simulate
 
     if DEBUG:
         print("ARGS", args, args.config)
@@ -107,25 +109,33 @@ def main():
         nb_options['branch_timeout'] = branch_timeout
     
     nb_options['debug'] = DEBUG
+    nb_options['simulate'] = SIMULATE
     
-    nb_pxmx_cluster = NetBoxProxmoxCluster(app_config)
-    nb_pxmx_cluster.debug = DEBUG
+    nb_pxmx_cluster = NetBoxProxmoxCluster(app_config, nb_options)
 
     if not 'site' in app_config['netbox']:
         netbox_site = "netbox-proxmox-automation Default Site"
     else:
         netbox_site = app_config['netbox']['site']
 
-    # Collect Proxmox node login information
-    nb_pxmx_cluster.generate_proxmox_node_creds_configuration()
-    proxmox_nodes_connection_info = nb_pxmx_cluster.proxmox_nodes_connection_info
+    if not SIMULATE:
+        # Collect Proxmox node login information
+        nb_pxmx_cluster.generate_proxmox_node_creds_configuration()
+        proxmox_nodes_connection_info = nb_pxmx_cluster.proxmox_nodes_connection_info
 
-    # discover nodes base system information
-    nb_pxmx_cluster.get_proxmox_nodes_system_information()
-    nb_pxmx_cluster.get_proxmox_nodes_network_interfaces()
-    
-    #nb_pxmx_cluster.get_proxmox_nodes_network_interfaces_OLD()
+        # discover nodes base system information
+        nb_pxmx_cluster.get_proxmox_nodes_system_information()
+        nb_pxmx_cluster.get_proxmox_nodes_network_interfaces()    
+    else:
+        print("*** IN SIMULATE MODE ***")
+        nb_pxmx_cluster.simulate_get_proxmox_nodes_system_information()
+        nb_pxmx_cluster.simulate_get_proxmox_nodes_network_interfaces()
+        nb_pxmx_cluster.discovered_proxmox_nodes_information = nb_pxmx_cluster.proxmox_nodes
+
     discovered_proxmox_nodes_information = nb_pxmx_cluster.discovered_proxmox_nodes_information
+
+    if DEBUG:
+        print(f"DISCOVERED: {discovered_proxmox_nodes_information}")
 
     try:
         netbox_site_id = dict(NetBoxSites(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': netbox_site, 'slug': __netbox_make_slug(netbox_site), 'status': 'active'}).obj)['id']
@@ -158,6 +168,7 @@ def main():
     except pynetbox.RequestError as e:
         raise ValueError(e, e.error)        
 
+    collected_netbox_device_type_ids = {}
     collected_netbox_interface_ids = {}
 
     for proxmox_node in discovered_proxmox_nodes_information:
@@ -189,6 +200,8 @@ def main():
         try:
             device_model = nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['model']
             netbox_device_type_id = dict(NetBoxDeviceTypes(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'manufacturer': netbox_manufacturer_id, 'model': device_model, 'slug': __netbox_make_slug(device_model), 'u_height': 1}).obj)['id']
+            collected_netbox_device_type_ids[proxmox_node] = netbox_device_type_id
+            print(f"CDT: {collected_netbox_device_type_ids}")
         except pynetbox.RequestError as e:
             raise ValueError(e, e.error)
 
@@ -213,7 +226,9 @@ def main():
 
             try:
                 network_interface_type = nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][network_interface]['type']
-                NetBoxDeviceTypesInterfaceTemplates(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'device_type': netbox_device_type_id, 'name': network_interface, 'type': network_interface_type, 'enabled': False})
+
+                if not proxmox_node in collected_netbox_device_type_ids:
+                    NetBoxDeviceTypesInterfaceTemplates(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'device_type': collected_netbox_device_type_ids[proxmox_node], 'name': network_interface, 'type': network_interface_type, 'enabled': False})
             except pynetbox.RequestError as e:
                 raise ValueError(e, e.error)
 
@@ -236,7 +251,7 @@ def main():
             device_payload = {
                 'name': proxmox_node,
                 'role': netbox_device_role_id,
-                'device_type': netbox_device_type_id,
+                'device_type': collected_netbox_device_type_ids[proxmox_node],
                 'site': netbox_site_id,
                 'platform': netbox_platform_id,
                 'cluster': netbox_cluster_id,
