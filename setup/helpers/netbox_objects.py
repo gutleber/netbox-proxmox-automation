@@ -14,7 +14,16 @@ def __netbox_make_slug(in_str: str):
 class NetBox:
     def _sanitize_value(self, key, value):
         # Mask sensitive fields
-        sensitive_keys = {'password', 'token', 'secret'}
+        sensitive_keys = {
+            'password',
+            'token',
+            'secret',
+            # Network-identifying fields that should not be logged in clear text
+            'mac_address',
+            'mac',
+            'ip-address',
+            'ip_address',
+        }
         if key in sensitive_keys:
             return '***'
         elif isinstance(value, dict):
@@ -471,7 +480,8 @@ class NetBoxVirtualMachineInterface(NetBox):
         ]
 
         if self.debug:
-            print(f"NetBoxVirtualMachineInterface payload: {payload}")
+            # Log a sanitized version of the payload to avoid exposing sensitive data
+            print(f"NetBoxVirtualMachineInterface payload: {self._sanitize_payload()}")
             print()
 
         self.find_key_mult = {'virtual_machine_id': self.payload['virtual_machine'], 'name': self.payload['name']}
