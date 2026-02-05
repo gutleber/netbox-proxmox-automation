@@ -35,6 +35,20 @@ def get_arguments():
     return args
 
 
+def convert_proxmox_interface_type_to_netbox(proxmox_type: str):
+    """Convert Proxmox interface type to NetBox interface type"""
+    interface_type_mapping = {
+        '1gbase-t': '1000base-t',
+        '10gbase-t': '10gbase-t',
+        '100base-tx': '100base-tx',
+        'bridge': 'virtual',
+        'vlan': 'virtual',
+        'bond': 'lag',
+        'other': 'other'
+    }
+    return interface_type_mapping.get(proxmox_type, 'other')
+
+
 def get_proxmox_node_vmbr_network_interface_mapping(proxmox_api_config: dict, proxmox_node: str, network_interface: str):
     proxmox_vmbrX_network_interface_mapping = {}
 
@@ -284,7 +298,7 @@ def main():
             interface_payload = {
                 'device': netbox_device_id,
                 'name': network_interface,
-                'type': nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][network_interface]['type'],
+                'type': convert_proxmox_interface_type_to_netbox(nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][network_interface]['type']),
                 'enabled': nb_pxmx_cluster.discovered_proxmox_nodes_information[proxmox_node]['system']['network_interfaces'][network_interface]['enabled']
             }
 

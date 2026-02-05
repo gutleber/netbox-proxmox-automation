@@ -178,3 +178,9 @@ netbox_importer.py*
 netbox_setup_objects.yml
 
 .simulate/
+
+# Protect secrets
+.vscode/
+setup/configuration.yml
+setup/quay
+

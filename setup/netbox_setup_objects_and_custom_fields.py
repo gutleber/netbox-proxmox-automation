@@ -54,7 +54,7 @@ def create_custom_field_choice_sets_proxmox_vm_storage(proxmox_api_obj, nb_optio
     return dict(ncfcs.obj)['id']
 
 
-def create_custom_field_choice_sets_proxmox_lxc_templates(proxmox_api_obj):
+def create_custom_field_choice_sets_proxmox_lxc_templates(proxmox_api_obj, nb_options: dict):
     extra_choices = []
 
     for proxmox_node in proxmox_api_obj.proxmox_nodes:
@@ -69,7 +69,7 @@ def create_custom_field_choice_sets_proxmox_lxc_templates(proxmox_api_obj):
     else:
         extra_choices.append(['placeholder-lxc-template', 'proxmox-lxc-templates-stub'])
 
-    ncfcs = NetBoxCustomFieldChoiceSets(netbox_url, netbox_api_token, {'name': 'proxmox-lxc-templates', 'extra_choices': extra_choices})
+    ncfcs = NetBoxCustomFieldChoiceSets(netbox_url, netbox_api_token, nb_options, {'name': 'proxmox-lxc-templates', 'extra_choices': extra_choices})
     return dict(ncfcs.obj)['id']
 
 
@@ -236,9 +236,14 @@ if __name__ == "__main__":
 
     nb_options['debug'] = DEBUG
 
+    # Build options for ProxmoxAPICommon
+    pm_options = {
+        'debug': DEBUG,
+        'simulate': False
+    }
 
     # init NetBox Proxmox API integration
-    p = NetBoxProxmoxAPIHelper(app_config)
+    p = NetBoxProxmoxAPIHelper(app_config, pm_options)
     p.debug = nb_options['debug']
 
     # setup defaults and override from config values later
@@ -285,7 +290,7 @@ if __name__ == "__main__":
             p.proxmox_get_lxc_templates(n)
 
         if len(p.proxmox_lxc_templates.keys()) > 0:
-            netbox_field_choice_sets_lxc_templates_id = create_custom_field_choice_sets_proxmox_lxc_templates(p)
+            netbox_field_choice_sets_lxc_templates_id = create_custom_field_choice_sets_proxmox_lxc_templates(p, nb_options)
 
     netbox_field_choice_sets_proxmox_nodes_id = create_custom_field_choice_sets_proxmox_vm_cluster_nodes(p, nb_options)
 

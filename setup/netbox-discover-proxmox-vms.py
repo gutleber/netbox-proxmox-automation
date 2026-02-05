@@ -87,11 +87,21 @@ def netbox_create_proxmox_discovered_object_tags(nb_obj = None, tag_name = None)
         raise ValueError(e, e.error)
 
 
-def netbox_create_vm(nb_url = None, nb_api_token = None, nb_options = {}, proxmox_cluster_name = None, vm_configuration = {}, vm_name = None, vm_role_id = 0, tag_id = 0):
+def netbox_create_vm(nb_url = None, nb_api_token = None, nb_options = {}, proxmox_cluster_name = None, vm_configuration = {}, vm_name = None, vm_role_id = 0, tag_id = 0, cluster_type_name = None):
     try:
+        # Look up cluster type ID first
+        cluster_type_obj = NetBoxClusterTypes(nb_url, nb_api_token, nb_options, {'name': cluster_type_name, 'slug': __netbox_make_slug(cluster_type_name)})
+        cluster_type_id = dict(cluster_type_obj.obj)['id']
+
+        cluster_payload = {
+            'name': proxmox_cluster_name,
+            'type': cluster_type_id,
+            'status': 'active'
+        }
+        cluster_obj = NetBoxClusters(nb_url, nb_api_token, nb_options, cluster_payload)
         create_vm_config = {
             'name': vm_name,
-            'cluster': dict(NetBoxClusters(nb_url, nb_api_token, nb_options, {'name': proxmox_cluster_name}).obj)['id'],
+            'cluster': dict(cluster_obj.obj)['id'],
             'vcpus': str(vm_configuration['vcpus']),
             'memory': vm_configuration['memory'],
             'role': vm_role_id,
@@ -283,6 +293,12 @@ def main():
 
     nb_options['debug'] = DEBUG
 
+    # Build options for ProxmoxAPICommon
+    pm_options = {
+        'debug': DEBUG,
+        'simulate': False
+    }
+
     nb_obj = NetBox(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {})
 
     # Collect all NetBox VMs, and for Proxmox VMs: VMIDs
@@ -298,7 +314,7 @@ def main():
         if 'id' in all_nb_vms[all_nb_vm]:
             all_nb_vms_ids[all_nb_vms[all_nb_vm]['id']] = all_nb_vm
 
-    pm = NetBoxProxmoxAPIHelper(app_config)
+    pm = NetBoxProxmoxAPIHelper(app_config, pm_options)
     pm.debug = DEBUG
 
     if args.virt_type == 'vm':
@@ -320,7 +336,7 @@ def main():
                 print(f"\t\t\tVM CONFIGURATION: {proxmox_vm_configurations[proxmox_vm_configuration]}")
                 print()
 
-            netbox_create_vm(nb_url, app_config['netbox_api_config']['api_token'], nb_options, pm.proxmox_cluster_name, proxmox_vm_configurations[proxmox_vm_configuration], proxmox_vm_configuration, device_role_id, nbt_vm_discovered_id)
+            netbox_create_vm(nb_url, app_config['netbox_api_config']['api_token'], nb_options, pm.proxmox_cluster_name, proxmox_vm_configurations[proxmox_vm_configuration], proxmox_vm_configuration, device_role_id, nbt_vm_discovered_id, app_config['netbox']['cluster_role'])
     elif args.virt_type == 'lxc':
         device_role_id = dict(NetBoxDeviceRoles(nb_url, app_config['netbox_api_config']['api_token'], nb_options, {'name': app_config['netbox']['lxc_role'], 'slug': __netbox_make_slug(app_config['netbox']['lxc_role']), 'vm_role': True, 'color': 'ff9800'}).obj)['id']
 
@@ -336,7 +352,7 @@ def main():
             else:
                 nbt_lxc_discovered_id = 0
 
-            netbox_create_vm(nb_url, app_config['netbox_api_config']['api_token'], nb_options, pm.proxmox_cluster_name, proxmox_lxc_configurations[proxmox_lxc_configuration], proxmox_lxc_configuration, device_role_id, nbt_lxc_discovered_id)
+            netbox_create_vm(nb_url, app_config['netbox_api_config']['api_token'], nb_options, pm.proxmox_cluster_name, proxmox_lxc_configurations[proxmox_lxc_configuration], proxmox_lxc_configuration, device_role_id, nbt_lxc_discovered_id, app_config['netbox']['cluster_role'])
     else:
         print(f"Unknown virtualizaton type {args.virt_type}")
         sys.exit(1)

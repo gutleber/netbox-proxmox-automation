@@ -9,8 +9,8 @@ from proxmoxer import ProxmoxAPI, ResourceException
 from . proxmox_api_common import ProxmoxAPICommon
 
 class NetBoxProxmoxAPIHelper(ProxmoxAPICommon):
-    def __init__(self, cfg_data):
-        super(NetBoxProxmoxAPIHelper, self).__init__(cfg_data)
+    def __init__(self, cfg_data, options):
+        super(NetBoxProxmoxAPIHelper, self).__init__(cfg_data, options)
 
         self.cfg_data = cfg_data
 
