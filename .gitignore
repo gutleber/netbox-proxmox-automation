@@ -182,5 +182,5 @@ netbox_setup_objects.yml
 # Protect secrets
 .vscode/
 setup/configuration.yml
-setup/quay
+setup/quay/**/root-ca.pem
 
