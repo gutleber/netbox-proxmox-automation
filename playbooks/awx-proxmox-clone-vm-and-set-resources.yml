@@ -77,6 +77,7 @@
       cores: "{{ vm_config['vcpus'] | int }}"
       vcpus: "{{ vm_config['vcpus'] | int }}"
       memory: "{{ vm_config['memory'] }}"
+      sshkeys: "{{ vm_config.get('ssh_key', '') | default(omit) if vm_config.get('ssh_key', '') else omit }}"
       update: true
     register: update_vms_settings_job
     async: 180
