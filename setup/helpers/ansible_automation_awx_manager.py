@@ -263,7 +263,7 @@ class AnsibleAutomationAWXManager(AnsibleAutomationAWX):
             self.project = get_project
             self.project_id = get_project['id']
         except Exception as e:
-            raise ValueError(f"Exception occurred when retrieving project {self.project['name']}: {e}")
+            raise ValueError(f"Exception occurred when retrieving project {project_name}: {e}")
 
 
     def get_playbooks(self):

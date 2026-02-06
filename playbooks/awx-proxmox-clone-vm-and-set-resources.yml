@@ -42,7 +42,7 @@
       api_host: "{{ proxmox_env_info.api_host }}"
       api_port: "{{ proxmox_env_info.api_port }}"
       clone: "{{ vm_config['template'] }}"
-      vmid: "{{ vm_config['template'] }}"
+      vmid: "{{ vm_config['template'] | string }}"
       name: "{{ vm_config['name'] }}"
       newid: "{{ vm_config['vmid'] | int | default(omit) }}"
       agent: 'enabled=1'
@@ -67,6 +67,7 @@
   - name: Update Proxmox VMs resource settings
     community.proxmox.proxmox_kvm:
       node: "{{ vm_config['node'] }}"
+      #vmid: "{{ _jobs_alias_vc_0.vmid | string }}"
       api_user: "{{ proxmox_env_info.api_user }}"
       api_token_id: "{{ proxmox_env_info.api_token_id }}"
       api_token_secret: "{{ proxmox_env_info.api_token_secret }}"
@@ -80,6 +81,7 @@
     register: update_vms_settings_job
     async: 180
     poll: 0
+    #when: not vm_config['name'] in collected_proxmox_vm and not vm_config['name'] in collected_proxmox_lxc
 
   - name: Wait for VM settings updates processes to finish
     async_status:
@@ -88,6 +90,7 @@
     until: _ujobs_alias_vc_0.finished
     retries: 60
     delay: 10
+    #when: not vm_config['name'] in collected_proxmox_vm and not vm_config['name'] in collected_proxmox_lxc
 
   - name: "Discover information for newly-created Proxmox VM"
     community.proxmox.proxmox_vm_info:
