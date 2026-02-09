@@ -67,7 +67,7 @@
   - name: Update Proxmox VMs resource settings
     community.proxmox.proxmox_kvm:
       node: "{{ vm_config['node'] }}"
-      #vmid: "{{ _jobs_alias_vc_0.vmid | string }}"
+      vmid: "{{ _jobs_alias_vc_0.vmid | string }}"
       api_user: "{{ proxmox_env_info.api_user }}"
       api_token_id: "{{ proxmox_env_info.api_token_id }}"
       api_token_secret: "{{ proxmox_env_info.api_token_secret }}"
